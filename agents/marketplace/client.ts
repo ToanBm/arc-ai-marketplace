@@ -261,7 +261,7 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
   // Phase 1: Initial request → expect 402
   let paymentInfo: X402PaymentRequest;
   try {
-    await axios.post(endpoint, body);
+    await axios.post(endpoint, body, { timeout: 10000 });
     throw new Error("Expected 402 but got 200");
   } catch (err: any) {
     if (err.response?.status === 402) {
@@ -284,6 +284,7 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
   const response = await withRetry(
     () => axios.post(endpoint, body, {
       headers: { "X-402-Payment-Proof": JSON.stringify(proof) },
+      timeout: 30000,
     }),
     "Service request"
   );
