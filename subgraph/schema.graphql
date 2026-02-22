@@ -1,0 +1,141 @@
+# ── Agent Identity ─────────────────────────────────────────────────────────
+
+type Agent @entity {
+  id: Bytes! # wallet address
+  name: String!
+  did: String!
+  endpoint: String!
+  capabilities: [String!]!
+  active: Boolean!
+  registeredAt: BigInt!
+  reputation: Reputation
+  tasksRequested: [Task!]! @derivedFrom(field: "requester")
+  tasksProvided: [Task!]! @derivedFrom(field: "provider")
+  feedbackGiven: [Feedback!]! @derivedFrom(field: "fromAgent")
+  feedbackReceived: [Feedback!]! @derivedFrom(field: "toAgent")
+}
+
+# ── Reputation ────────────────────────────────────────────────────────────
+
+type Reputation @entity {
+  id: Bytes! # agent wallet address
+  totalScore: BigInt!
+  taskCount: BigInt!
+  successCount: BigInt!
+  lastUpdated: BigInt!
+  agent: Agent!
+}
+
+type Feedback @entity {
+  id: ID! # auto-increment index
+  fromAgent: Agent!
+  toAgent: Agent!
+  taskId: Bytes!
+  score: Int!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# ── Validation / Tasks ────────────────────────────────────────────────────
+
+enum TaskStatus {
+  Pending
+  Submitted
+  Verified
+  Disputed
+}
+
+type Task @entity {
+  id: Bytes! # taskId
+  requester: Agent!
+  provider: Agent!
+  description: String!
+  resultHash: Bytes
+  resultUri: String
+  status: TaskStatus!
+  createdAt: BigInt!
+  completedAt: BigInt
+  escrow: Escrow
+}
+
+# ── Payment Escrow ────────────────────────────────────────────────────────
+
+enum EscrowStatus {
+  None
+  Funded
+  Released
+  Refunded
+  Expired
+}
+
+type Escrow @entity {
+  id: Bytes! # taskId
+  task: Task!
+  payer: Agent!
+  payee: Agent!
+  amount: BigInt!
+  status: EscrowStatus!
+  createdAt: BigInt!
+  deadline: BigInt!
+}
+
+# ── Negotiation ───────────────────────────────────────────────────────────
+
+enum RfqStatus {
+  Open
+  Awarded
+  Cancelled
+}
+
+enum BidStatus {
+  Active
+  Won
+  Lost
+  Withdrawn
+}
+
+type Rfq @entity {
+  id: Bytes! # rfqId
+  requester: Agent!
+  capability: String!
+  description: String!
+  maxBudget: BigInt!
+  deadline: BigInt!
+  status: RfqStatus!
+  winningBid: Bid
+  createdAt: BigInt!
+  bids: [Bid!]! @derivedFrom(field: "rfq")
+}
+
+type Bid @entity {
+  id: Bytes! # bidId
+  rfq: Rfq!
+  provider: Agent!
+  price: BigInt!
+  estimatedTime: BigInt!
+  terms: String!
+  status: BidStatus!
+  submittedAt: BigInt!
+}
+
+# ── Arbitration ───────────────────────────────────────────────────────────
+
+enum Ruling {
+  Pending
+  FavorPayer
+  FavorPayee
+}
+
+type Dispute @entity {
+  id: Bytes! # taskId
+  task: Task!
+  payer: Agent!
+  payee: Agent!
+  reason: String!
+  evidence: String
+  ruling: Ruling!
+  arbitrator: Bytes
+  rulingReason: String
+  filedAt: BigInt!
+  resolvedAt: BigInt
+}

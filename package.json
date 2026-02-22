@@ -1,0 +1,52 @@
+{
+  "name": "arc-8004-ai-agent-economy",
+  "version": "1.0.0",
+  "description": "AI Agent Economy PoC using ERC-8004, x402, and Chainlink on Arc Testnet",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:arc": "hardhat run scripts/deploy.ts --network arcTestnet",
+    "redeploy:escrow": "hardhat run scripts/redeploy-escrow.ts --network arcTestnet",
+    "agent:a": "ts-node agents/agentA/client.ts",
+    "agent:b": "ts-node agents/agentB/server.ts",
+    "agent:c": "ts-node agents/agentC/server.ts",
+    "agent:d": "ts-node agents/agentD/server.ts",
+    "agent:e": "ts-node agents/agentE/server.ts",
+    "agent:f": "ts-node agents/agentF/server.ts",
+    "agent:g": "ts-node agents/agentG/server.ts",
+    "agent:h": "ts-node agents/agentH/server.ts",
+    "agent:i": "ts-node agents/agentI/server.ts",
+    "marketplace": "ts-node agents/marketplace/client.ts",
+    "demo": "ts-node scripts/run-demo.ts",
+    "demo:local": "hardhat run scripts/run-demo.ts --network localhost",
+    "node": "hardhat node",
+    "dashboard": "ts-node dashboard/server.ts",
+    "gateway": "ts-node dashboard/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:install": "cd frontend && npm install"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "hardhat": "^2.22.0",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "axios": "^1.6.0",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^16.4.0",
+    "ethers": "^6.11.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1"
+  }
+}

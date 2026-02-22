@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0f1117;
+  --bg-surface: #1a1d27;
+  --bg-surface-light: #242836;
+  --accent: #6c5ce7;
+  --accent-light: #a29bfe;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: #e2e8f0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-light);
+  border-radius: 3px;
+}

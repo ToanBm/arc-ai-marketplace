@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agent Economy Dashboard — ERC-8004</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.11.0/dist/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242836;
+      --border: #2e3345;
+      --text: #e1e4ed;
+      --text-dim: #8b90a0;
+      --accent: #6c5ce7;
+      --accent2: #a29bfe;
+      --green: #00b894;
+      --red: #e17055;
+      --yellow: #fdcb6e;
+      --blue: #74b9ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+    .header .subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .connection {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+    .status-dot.connected { background: var(--green); }
+    .connect-btn {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .connect-btn:hover { background: var(--accent2); }
+    .connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .container { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+    /* Top section: Price Check (left) + Stats (right) */
+    .top-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .top-section .check-panel {
+      margin-bottom: 0;
+    }
+    .stats-column {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 16px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .stat-card .label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.blue { color: var(--blue); }
+    .stat-card .value.yellow { color: var(--yellow); }
+    .stat-card .value.accent { color: var(--accent2); }
+
+    .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+    .panel-body {
+      padding: 16px 20px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      color: var(--text-dim);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: var(--surface2); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge.active { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge.inactive { background: rgba(225, 112, 85, 0.15); color: var(--red); }
+    .badge.funded { background: rgba(253, 203, 110, 0.15); color: var(--yellow); }
+    .badge.released { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge.refunded { background: rgba(225, 112, 85, 0.15); color: var(--red); }
+    .badge.expired { background: rgba(139, 144, 160, 0.15); color: var(--text-dim); }
+    .badge.pending { background: rgba(116, 185, 255, 0.15); color: var(--blue); }
+    .badge.submitted { background: rgba(253, 203, 110, 0.15); color: var(--yellow); }
+    .badge.verified { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge.disputed { background: rgba(225, 112, 85, 0.15); color: var(--red); }
+
+    .addr {
+      font-family: inherit;
+      color: var(--blue);
+      font-size: 11px;
+    }
+    .stars { color: var(--yellow); }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* ── Transaction Process Panel ── */
+    .txn-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .txn-panel .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .txn-panel .panel-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+
+    /* Two-column body */
+    .txn-columns {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+    }
+    .txn-left {
+      border-right: 1px solid var(--border);
+    }
+    .txn-right {
+      position: relative;
+    }
+    .txn-right-inner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .live-meta {
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px 0;
+      font-size: 11px;
+      color: var(--text-dim);
+      flex-wrap: wrap;
+    }
+    .live-meta span { color: var(--text); font-weight: 600; }
+
+    /* Timeline (compact for half-width) */
+    .timeline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 12px 6px;
+      position: relative;
+    }
+    .timeline-track {
+      position: absolute;
+      top: 31px;
+      left: 30px;
+      right: 30px;
+      height: 3px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .timeline-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 1;
+      min-width: 0;
+      flex: 1;
+    }
+    .node-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-dim);
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+    .node-dot.done {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+    .node-dot.running {
+      background: var(--accent);
+      border-color: var(--accent2);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(108, 92, 231, 0.5);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .node-dot.error {
+      background: var(--red);
+      border-color: var(--red);
+      color: #fff;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(108, 92, 231, 0.4); }
+      50% { box-shadow: 0 0 18px rgba(108, 92, 231, 0.7); }
+    }
+    .node-label {
+      margin-top: 4px;
+      font-size: 8px;
+      color: var(--text-dim);
+      text-align: center;
+      max-width: 56px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .node-label.active { color: var(--text); font-weight: 600; }
+
+    .detail-line {
+      padding: 4px 16px 12px;
+      font-size: 11px;
+      color: var(--text-dim);
+      min-height: 28px;
+    }
+    .detail-line .detail-text { color: var(--accent2); }
+
+    /* Log viewer (right column) */
+    .log-header {
+      padding: 10px 16px;
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .log-viewer {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .log-entry {
+      padding: 3px 16px;
+      font-size: 11px;
+      line-height: 1.5;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .log-entry.step-header {
+      padding-top: 8px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .log-entry.step-header:first-child { padding-top: 3px; }
+    .log-entry.step-detail {
+      color: var(--text-dim);
+      padding-left: 32px;
+    }
+    .log-icon {
+      flex-shrink: 0;
+      width: 14px;
+      text-align: center;
+      font-size: 10px;
+    }
+    .log-icon.done { color: var(--green); }
+    .log-icon.running { color: var(--accent2); }
+    .log-icon.error { color: var(--red); }
+    .log-icon.info { color: var(--blue); }
+    .log-text { flex: 1; }
+    .log-text .log-value { color: var(--accent2); }
+    .log-text .log-green { color: var(--green); }
+    .log-text .log-yellow { color: var(--yellow); }
+    .log-text .log-blue { color: var(--blue); }
+    .log-text .log-dim { color: var(--text-dim); }
+    .log-text .log-addr { color: var(--blue); font-size: 10px; }
+
+    /* History table */
+    .history-section {
+      border-top: 1px solid var(--border);
+      padding: 0;
+    }
+    .history-section .section-title {
+      padding: 12px 20px;
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-section .panel-body {
+      padding: 0 20px 16px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .badge.reputation { background: rgba(108, 92, 231, 0.15); color: var(--accent2); }
+    .badge.exploration { background: rgba(116, 185, 255, 0.15); color: var(--blue); }
+    .badge.cheapest { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge.success { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge.failure { background: rgba(225, 112, 85, 0.15); color: var(--red); }
+    .badge.running-badge { background: rgba(108, 92, 231, 0.15); color: var(--accent2); }
+
+    /* ── Price Check Panel ── */
+    .check-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .check-panel .panel-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .check-panel .panel-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+    .check-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      flex-wrap: wrap;
+    }
+    .check-controls select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .check-btn {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .check-btn:hover { background: var(--accent2); }
+    .check-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cost-note {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+    .health-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .health-dot.green { background: var(--green); }
+    .health-dot.red { background: var(--red); }
+    .health-dot.unknown { background: var(--text-dim); }
+    .check-result {
+      padding: 0 20px 16px;
+    }
+    .result-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .result-item .rlabel {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .result-item .rvalue {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .check-error {
+      padding: 0 20px 16px;
+    }
+    .error-box {
+      background: rgba(225, 112, 85, 0.1);
+      border: 1px solid rgba(225, 112, 85, 0.3);
+      border-radius: 6px;
+      padding: 12px 16px;
+      color: var(--red);
+      font-size: 12px;
+    }
+
+    @media (max-width: 900px) {
+      .top-section { grid-template-columns: 1fr; }
+      .panels { grid-template-columns: 1fr; }
+      .txn-columns { grid-template-columns: 1fr; }
+      .txn-left { border-right: none; border-bottom: 1px solid var(--border); }
+      .timeline { overflow-x: auto; justify-content: flex-start; gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>AI Agent Economy Dashboard</h1>
+      <div class="subtitle">ERC-8004 + x402 + Chainlink | Arc Testnet (5042002)</div>
+    </div>
+    <div class="connection">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="networkLabel" style="font-size:12px;color:var(--text-dim)">Disconnected</span>
+      <button class="connect-btn" id="connectBtn" onclick="connect()">Connect</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Top section: Price Check + Stats -->
+    <div class="top-section">
+      <!-- Left: Price Check -->
+      <div class="check-panel">
+        <div class="panel-header">
+          <h2>Price Check</h2>
+          <span style="font-size:11px;color:var(--text-dim)">
+            <span class="health-dot unknown" id="healthDot"></span>
+            <span id="healthLabel">Checking...</span>
+          </span>
+        </div>
+        <div class="check-controls">
+          <select id="pairSelect">
+            <option value="ETH/USD">ETH/USD</option>
+            <option value="BTC/USD">BTC/USD</option>
+          </select>
+          <button class="check-btn" id="runCheckBtn" onclick="runCheck()">Run Check</button>
+          <span class="cost-note">Each check costs ~8 txns + 3-5 MockUSDC. Cached for 60s.</span>
+        </div>
+        <div class="check-result" id="checkResultArea" style="display:none">
+          <div class="result-card" id="resultCard"></div>
+        </div>
+        <div class="check-error" id="checkErrorArea" style="display:none">
+          <div class="error-box" id="errorBox"></div>
+        </div>
+      </div>
+      <!-- Right: Stats 2x2 grid -->
+      <div class="stats-column">
+        <div class="stat-card">
+          <div class="label">Registered Agents</div>
+          <div class="value accent" id="agentCount">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Network</div>
+          <div class="value green" id="networkName" style="font-size:16px">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Total Tasks</div>
+          <div class="value blue" id="taskCount">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Feedback Entries</div>
+          <div class="value yellow" id="feedbackCount">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaction Process Panel -->
+    <div class="txn-panel">
+      <div class="panel-header">
+        <h2>Transaction Process</h2>
+        <span id="txnStatus" style="font-size:11px;color:var(--text-dim)">Waiting for data...</span>
+      </div>
+      <div class="txn-columns">
+        <!-- Left: Timeline -->
+        <div class="txn-left">
+          <div class="live-meta" id="liveMeta"></div>
+          <div class="timeline">
+            <div class="timeline-track"></div>
+            <div class="timeline-node" data-step="1"><div class="node-dot">1</div><div class="node-label">Register</div></div>
+            <div class="timeline-node" data-step="2"><div class="node-dot">2</div><div class="node-label">Discover</div></div>
+            <div class="timeline-node" data-step="3"><div class="node-dot">3</div><div class="node-label">Select</div></div>
+            <div class="timeline-node" data-step="4"><div class="node-dot">4</div><div class="node-label">Task</div></div>
+            <div class="timeline-node" data-step="5"><div class="node-dot">5</div><div class="node-label">Escrow</div></div>
+            <div class="timeline-node" data-step="6"><div class="node-dot">6</div><div class="node-label">Request</div></div>
+            <div class="timeline-node" data-step="7"><div class="node-dot">7</div><div class="node-label">402</div></div>
+            <div class="timeline-node" data-step="8"><div class="node-dot">8</div><div class="node-label">Verify</div></div>
+            <div class="timeline-node" data-step="9"><div class="node-dot">9</div><div class="node-label">Release</div></div>
+            <div class="timeline-node" data-step="10"><div class="node-dot">10</div><div class="node-label">Done</div></div>
+          </div>
+          <div class="detail-line" id="detailLine"></div>
+          <div class="history-section">
+            <div class="section-title">Completed Runs</div>
+            <div class="panel-body" id="historyBody">
+              <div class="empty-state">No completed runs yet</div>
+            </div>
+          </div>
+        </div>
+        <!-- Right: Live Log -->
+        <div class="txn-right">
+          <div class="txn-right-inner">
+            <div class="log-header">
+              <span>Workflow Log</span>
+              <span id="logRunId" style="font-size:10px;color:var(--text-dim);text-transform:none;letter-spacing:0"></span>
+            </div>
+            <div class="log-viewer" id="logViewer">
+              <div class="log-entry step-detail"><span class="log-text log-dim">Waiting for workflow...</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── Explorer + Auto-connect ──
+
+    const EXPLORER_BASE = 'https://5042002.explorer.thirdweb.com';
+    let provider;
+    let chainExplorer = EXPLORER_BASE;
+    const IDENTITY_ABI = ['function agentCount() view returns (uint256)'];
+    const REPUTATION_ABI = ['function feedbackCount() view returns (uint256)'];
+    const VALIDATION_ABI = ['function taskCount() view returns (uint256)'];
+
+    function shortenAddr(addr) {
+      return addr.slice(0, 6) + '...' + addr.slice(-4);
+    }
+
+    function explorerAddr(addr) {
+      return `${chainExplorer}/address/${addr}`;
+    }
+
+    function explorerTx(hash) {
+      return `${chainExplorer}/tx/${hash}`;
+    }
+
+    async function autoConnect() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+
+        if (cfg.rpcUrl && cfg.contracts && cfg.contracts.identity) {
+          provider = new ethers.JsonRpcProvider(cfg.rpcUrl);
+          const network = await provider.getNetwork();
+          const chainId = Number(network.chainId);
+
+          // Resolve explorer URL by chain
+          if (chainId === 5042002) {
+            chainExplorer = 'https://5042002.explorer.thirdweb.com';
+          } else if (chainId === 31337) {
+            chainExplorer = '';
+          }
+
+          document.getElementById('statusDot').classList.add('connected');
+          document.getElementById('networkLabel').textContent = `Chain ${chainId}`;
+          document.getElementById('networkName').textContent = `Chain ${chainId}`;
+          document.getElementById('connectBtn').textContent = 'Connected';
+          document.getElementById('connectBtn').disabled = true;
+
+          // Load stats
+          try {
+            const id = new ethers.Contract(cfg.contracts.identity, IDENTITY_ABI, provider);
+            const vl = new ethers.Contract(cfg.contracts.validation, VALIDATION_ABI, provider);
+            const rp = new ethers.Contract(cfg.contracts.reputation, REPUTATION_ABI, provider);
+            const [ac, tc, fc] = await Promise.all([id.agentCount(), vl.taskCount(), rp.feedbackCount()]);
+            document.getElementById('agentCount').textContent = ac.toString();
+            document.getElementById('taskCount').textContent = tc.toString();
+            document.getElementById('feedbackCount').textContent = fc.toString();
+          } catch { /* stats unavailable */ }
+        }
+      } catch {
+        console.log('Auto-connect unavailable');
+      }
+    }
+
+    async function connect() {
+      autoConnect();
+    }
+    // ── Transaction Process Panel (polls workflow-log.json) ──
+
+    const STEP_LABELS = ['', 'Register', 'Discover', 'Select', 'Create Task', 'Escrow', 'Request', '402+Proof', 'Verify', 'Release', 'Feedback'];
+
+    function getStrategyKey(strategy) {
+      if (!strategy) return 'reputation';
+      const s = strategy.toLowerCase();
+      if (s.startsWith('cheapest')) return 'cheapest';
+      if (s.startsWith('exploration')) return 'exploration';
+      return 'reputation';
+    }
+
+    function renderTimeline(events) {
+      // Group events by runId
+      const runs = {};
+      for (const e of events) {
+        if (!runs[e.runId]) runs[e.runId] = [];
+        runs[e.runId].push(e);
+      }
+
+      const runIds = Object.keys(runs);
+      if (runIds.length === 0) return;
+
+      // Find the latest run (live view)
+      const latestRunId = runIds[runIds.length - 1];
+      const latestEvents = runs[latestRunId];
+      const lastEvent = latestEvents[latestEvents.length - 1];
+
+      // Determine step states for the live run
+      const stepStates = {}; // step -> 'done' | 'running' | 'error'
+      for (const e of latestEvents) {
+        if (e.step >= 1 && e.step <= 10) {
+          stepStates[e.step] = e.status;
+        }
+      }
+
+      // Update nodes
+      document.querySelectorAll('.timeline-node').forEach(node => {
+        const step = parseInt(node.dataset.step);
+        const dot = node.querySelector('.node-dot');
+        const label = node.querySelector('.node-label');
+        dot.className = 'node-dot';
+        label.className = 'node-label';
+
+        const state = stepStates[step];
+        if (state === 'done') {
+          dot.classList.add('done');
+        } else if (state === 'running') {
+          dot.classList.add('running');
+          label.classList.add('active');
+        } else if (state === 'error') {
+          dot.classList.add('error');
+        }
+      });
+
+      // Live meta info
+      const meta = document.getElementById('liveMeta');
+      const stratKey = getStrategyKey(lastEvent.strategy);
+      meta.innerHTML = `
+        Strategy: <span class="badge ${stratKey}">${stratKey}</span>&nbsp;&nbsp;
+        Attempt: <span>#${lastEvent.attempt}</span>&nbsp;&nbsp;
+        Pair: <span>${lastEvent.pair}</span>&nbsp;&nbsp;
+        ${lastEvent.providerName ? `Provider: <span>${lastEvent.providerName}</span>` : ''}
+      `;
+
+      // Status label
+      const statusEl = document.getElementById('txnStatus');
+      const isComplete = lastEvent.step === 10 && lastEvent.status === 'done';
+      const isError = lastEvent.status === 'error';
+      if (isComplete) {
+        statusEl.textContent = 'Completed';
+        statusEl.style.color = 'var(--green)';
+      } else if (isError) {
+        statusEl.textContent = 'Error';
+        statusEl.style.color = 'var(--red)';
+      } else {
+        statusEl.textContent = 'Running...';
+        statusEl.style.color = 'var(--accent2)';
+      }
+
+      // Detail line
+      const detailEl = document.getElementById('detailLine');
+      if (lastEvent.detail) {
+        detailEl.innerHTML = `Step ${lastEvent.step}: <span class="detail-text">${lastEvent.detail}</span>`;
+      }
+
+      // ── Log viewer (right column) ──
+      const logViewer = document.getElementById('logViewer');
+      const logRunId = document.getElementById('logRunId');
+      logRunId.textContent = latestRunId;
+
+      let logHtml = '';
+      // Group events by step to build structured log
+      let currentStep = -1;
+      for (const e of latestEvents) {
+        if (e.step === 0) {
+          // Workflow start event
+          logHtml += `<div class="log-entry step-header"><span class="log-icon info">&#9654;</span><span class="log-text">Agent A Workflow <span class="log-value">Pair: ${e.pair}</span> <span class="log-dim">Attempt #${e.attempt}</span></span></div>`;
+          continue;
+        }
+
+        const icon = e.status === 'done' ? '<span class="log-icon done">&#10003;</span>'
+                   : e.status === 'error' ? '<span class="log-icon error">&#10007;</span>'
+                   : '<span class="log-icon running">&#9679;</span>';
+
+        if (e.step !== currentStep || e.status === 'running') {
+          // Step header line
+          if (e.status === 'running') {
+            currentStep = e.step;
+            logHtml += `<div class="log-entry step-header">${icon}<span class="log-text">[Step ${e.step}] ${e.label}</span></div>`;
+          }
+        }
+
+        if (e.status === 'done' || e.status === 'error') {
+          // Detail line with result info
+          let detailParts = [];
+
+          if (e.detail) {
+            // Parse detail for rich formatting
+            let formatted = e.detail
+              .replace(/\$[\d,.]+/g, '<span class="log-green">$&</span>')
+              .replace(/[\d.]+ USDC/g, '<span class="log-yellow">$&</span>')
+              .replace(/0x[a-fA-F0-9]{8,}/g, '<span class="log-addr">$&</span>')
+              .replace(/(bullish|bearish|neutral)/gi, (m) => {
+                const c = m.toLowerCase() === 'bullish' ? 'log-green' : m.toLowerCase() === 'bearish' ? 'log-icon error' : 'log-yellow';
+                return `<span class="${c}">${m}</span>`;
+              });
+            detailParts.push(formatted);
+          }
+
+          if (e.providerName && (e.step === 2 || e.step === 3)) {
+            if (e.providerAddr) {
+              detailParts.push(`Provider: <span class="log-value">${e.providerName}</span> <span class="log-addr">(${e.providerAddr.slice(0, 6)}...${e.providerAddr.slice(-4)})</span>`);
+            }
+          }
+
+          const statusIcon = e.status === 'done'
+            ? '<span class="log-icon done">&#10003;</span>'
+            : '<span class="log-icon error">&#10007;</span>';
+
+          if (detailParts.length > 0) {
+            logHtml += `<div class="log-entry step-detail">${statusIcon}<span class="log-text">${detailParts.join('<br>')}</span></div>`;
+          } else {
+            logHtml += `<div class="log-entry step-detail">${statusIcon}<span class="log-text log-dim">${e.label} complete</span></div>`;
+          }
+        }
+      }
+
+      // Summary block if workflow is complete
+      if (isComplete && lastEvent.detail) {
+        logHtml += `<div class="log-entry step-header" style="margin-top:6px;padding-top:8px;border-top:1px solid var(--border)"><span class="log-icon done">&#9632;</span><span class="log-text">Workflow Complete</span></div>`;
+        const parts = lastEvent.detail.split(' | ');
+        for (const p of parts) {
+          let formatted = p
+            .replace(/\$[\d,.]+/g, '<span class="log-green">$&</span>')
+            .replace(/[\d.]+ USDC/g, '<span class="log-yellow">$&</span>')
+            .replace(/rep [\d.]+\/5/g, '<span class="log-value">$&</span>');
+          logHtml += `<div class="log-entry step-detail"><span class="log-icon info">&#8226;</span><span class="log-text">${formatted}</span></div>`;
+        }
+      }
+
+      logViewer.innerHTML = logHtml;
+      // Auto-scroll to bottom
+
+      // ── History table: all completed runs ──
+      const completedRuns = runIds.filter(id => {
+        const evts = runs[id];
+        const last = evts[evts.length - 1];
+        return last.step === 10 && (last.status === 'done' || last.status === 'error');
+      });
+
+      if (completedRuns.length === 0) {
+        document.getElementById('historyBody').innerHTML = '<div class="empty-state">No completed runs yet</div>';
+        return;
+      }
+
+      let html = '<table><tr><th>#</th><th>Strategy</th><th>Provider</th><th>Pair</th><th>Payment</th><th>Status</th><th>Time</th></tr>';
+      for (let i = completedRuns.length - 1; i >= Math.max(0, completedRuns.length - 5); i--) {
+        const evts = runs[completedRuns[i]];
+        const last = evts[evts.length - 1];
+        const first = evts[0];
+        const sKey = getStrategyKey(last.strategy);
+        const success = last.status === 'done';
+        // Extract payment from detail if available
+        const payMatch = last.detail ? last.detail.match(/([\d.]+)\s*USDC/) : null;
+        const payment = payMatch ? payMatch[1] + ' USDC' : '-';
+        const time = new Date(first.timestamp).toLocaleTimeString();
+
+        html += `<tr>
+          <td>${last.attempt}</td>
+          <td><span class="badge ${sKey}">${sKey}</span></td>
+          <td>${last.providerName || '-'}</td>
+          <td>${last.pair}</td>
+          <td>${payment}</td>
+          <td><span class="badge ${success ? 'success' : 'failure'}">${success ? 'Success' : 'Failed'}</span></td>
+          <td style="font-size:11px;color:var(--text-dim)">${time}</td>
+        </tr>`;
+      }
+      html += '</table>';
+      document.getElementById('historyBody').innerHTML = html;
+    }
+
+    async function fetchLog() {
+      try {
+        const res = await fetch('/api/workflow-log');
+        if (res.ok) {
+          const events = await res.json();
+          if (events.length > 0) renderTimeline(events);
+        }
+      } catch {
+        // Dashboard server may not be running — ignore
+      }
+    }
+
+    // Auto-connect on page load using server config
+    autoConnect();
+
+    // Poll every 2 seconds
+    fetchLog();
+    setInterval(fetchLog, 2000);
+
+    // ── Price Check functions ──
+
+    async function checkHealth() {
+      const dot = document.getElementById('healthDot');
+      const label = document.getElementById('healthLabel');
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        if (data.healthy) {
+          dot.className = 'health-dot green';
+          label.textContent = 'All systems healthy';
+          label.style.color = 'var(--green)';
+        } else {
+          dot.className = 'health-dot red';
+          const down = Object.entries(data.checks)
+            .filter(([, v]) => !v.ok)
+            .map(([k]) => k)
+            .join(', ');
+          label.textContent = 'Down: ' + down;
+          label.style.color = 'var(--red)';
+        }
+      } catch {
+        dot.className = 'health-dot red';
+        label.textContent = 'Dashboard server unreachable';
+        label.style.color = 'var(--red)';
+      }
+    }
+
+    async function runCheck() {
+      const btn = document.getElementById('runCheckBtn');
+      const pair = document.getElementById('pairSelect').value;
+      const resultArea = document.getElementById('checkResultArea');
+      const errorArea = document.getElementById('checkErrorArea');
+
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+      resultArea.style.display = 'none';
+      errorArea.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pair }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorArea.style.display = 'block';
+          let hint = '';
+          if (res.status === 429) hint = ' Try again in a moment.';
+          if (res.status === 503) hint = ' Start Agent B first.';
+          document.getElementById('errorBox').textContent = (data.error || 'Unknown error') + hint;
+          return;
+        }
+
+        const r = data.result;
+        const oracle = r.oracleResult?.oracleData || {};
+        const trendColor = r.oracleResult?.trend === 'bullish' ? 'var(--green)' :
+                           r.oracleResult?.trend === 'bearish' ? 'var(--red)' : 'var(--yellow)';
+
+        document.getElementById('resultCard').innerHTML = `
+          <div class="result-item"><div class="rlabel">Price</div><div class="rvalue" style="color:var(--text)">$${oracle.price || '-'}</div></div>
+          <div class="result-item"><div class="rlabel">Trend</div><div class="rvalue" style="color:${trendColor}">${r.oracleResult?.trend || '-'}</div></div>
+          <div class="result-item"><div class="rlabel">Confidence</div><div class="rvalue" style="color:var(--blue)">${r.oracleResult?.confidence ? (r.oracleResult.confidence * 100).toFixed(0) + '%' : '-'}</div></div>
+          ${data.cached ? '<div class="result-item"><div class="rlabel">Cache</div><div class="rvalue" style="color:var(--green);font-size:12px">Cached result</div></div>' : ''}
+        `;
+        resultArea.style.display = 'block';
+      } catch (err) {
+        errorArea.style.display = 'block';
+        document.getElementById('errorBox').textContent = 'Request failed: ' + err.message;
+      } finally {
+        btn.textContent = 'Run Check';
+        btn.disabled = false;
+      }
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const btn = document.getElementById('runCheckBtn');
+        if (data.workflowRunning && btn.textContent !== 'Running...') {
+          btn.disabled = true;
+          btn.textContent = 'Running...';
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Health check every 30s, status poll every 2s
+    checkHealth();
+    setInterval(checkHealth, 30000);
+    setInterval(pollStatus, 2000);
+  </script>
+</body>
+</html>

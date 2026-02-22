@@ -1,0 +1,155 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: IdentityRegistry
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: IdentityRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Agent
+      abis:
+        - name: IdentityRegistry
+          file: ../artifacts/contracts/IdentityRegistry.sol/IdentityRegistry.json
+      eventHandlers:
+        - event: AgentRegistered(indexed address,string,string)
+          handler: handleAgentRegistered
+        - event: AgentUpdated(indexed address,string)
+          handler: handleAgentUpdated
+        - event: AgentDeactivated(indexed address)
+          handler: handleAgentDeactivated
+      file: ./src/identity.ts
+
+  - kind: ethereum
+    name: ReputationRegistry
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: ReputationRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Reputation
+        - Feedback
+      abis:
+        - name: ReputationRegistry
+          file: ../artifacts/contracts/ReputationRegistry.sol/ReputationRegistry.json
+      eventHandlers:
+        - event: FeedbackAdded(indexed address,indexed address,indexed bytes32,uint8)
+          handler: handleFeedbackAdded
+      file: ./src/reputation.ts
+
+  - kind: ethereum
+    name: ValidationRegistry
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: ValidationRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Task
+      abis:
+        - name: ValidationRegistry
+          file: ../artifacts/contracts/ValidationRegistry.sol/ValidationRegistry.json
+      eventHandlers:
+        - event: TaskCreated(indexed bytes32,indexed address,string)
+          handler: handleTaskCreated
+        - event: TaskSubmitted(indexed bytes32,indexed address,bytes32)
+          handler: handleTaskSubmitted
+        - event: TaskVerified(indexed bytes32,indexed address)
+          handler: handleTaskVerified
+        - event: TaskDisputed(indexed bytes32,indexed address)
+          handler: handleTaskDisputed
+      file: ./src/validation.ts
+
+  - kind: ethereum
+    name: PaymentEscrow
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: PaymentEscrow
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Escrow
+      abis:
+        - name: PaymentEscrow
+          file: ../artifacts/contracts/PaymentEscrow.sol/PaymentEscrow.json
+      eventHandlers:
+        - event: EscrowCreated(indexed bytes32,indexed address,indexed address,uint256)
+          handler: handleEscrowCreated
+        - event: EscrowReleased(indexed bytes32,indexed address,uint256)
+          handler: handleEscrowReleased
+        - event: EscrowRefunded(indexed bytes32,indexed address,uint256)
+          handler: handleEscrowRefunded
+        - event: EscrowExpired(indexed bytes32,indexed address,uint256)
+          handler: handleEscrowExpired
+      file: ./src/escrow.ts
+
+  - kind: ethereum
+    name: NegotiationManager
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: NegotiationManager
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Rfq
+        - Bid
+      abis:
+        - name: NegotiationManager
+          file: ../artifacts/contracts/NegotiationManager.sol/NegotiationManager.json
+      eventHandlers:
+        - event: RfqCreated(indexed bytes32,indexed address,string,uint256)
+          handler: handleRfqCreated
+        - event: BidSubmitted(indexed bytes32,indexed bytes32,indexed address,uint256)
+          handler: handleBidSubmitted
+        - event: BidAwarded(indexed bytes32,indexed bytes32,indexed address)
+          handler: handleBidAwarded
+      file: ./src/negotiation.ts
+
+  - kind: ethereum
+    name: ArbitrationRegistry
+    network: arc-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Replace after deploy
+      abi: ArbitrationRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Dispute
+      abis:
+        - name: ArbitrationRegistry
+          file: ../artifacts/contracts/ArbitrationRegistry.sol/ArbitrationRegistry.json
+      eventHandlers:
+        - event: DisputeFiled(indexed bytes32,indexed address,indexed address,string)
+          handler: handleDisputeFiled
+        - event: EvidenceSubmitted(indexed bytes32,indexed address,string)
+          handler: handleEvidenceSubmitted
+        - event: DisputeResolved(indexed bytes32,uint8,address)
+          handler: handleDisputeResolved
+      file: ./src/arbitration.ts

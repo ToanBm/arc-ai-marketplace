@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+dist/
+frontend/.next/
+frontend/out/
+
+# Hardhat
+cache/
+artifacts/
+typechain-types/
+coverage/
+
+# Environment — NEVER commit real keys
+.env
+.env.local
+frontend/.env.local
+frontend/.env*.local
+
+# Database & runtime data (directory auto-created by storage.ts)
+agents/data/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
