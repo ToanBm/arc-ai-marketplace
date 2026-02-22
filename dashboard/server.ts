@@ -462,6 +462,7 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["translation"] = true;
+  const translationReset = setTimeout(() => { serviceRunning["translation"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("translation", { text, targetLanguage });
     res.json({
@@ -475,6 +476,7 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
+    clearTimeout(translationReset);
     serviceRunning["translation"] = false;
   }
 });
@@ -499,6 +501,7 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["summarization"] = true;
+  const summarizationReset = setTimeout(() => { serviceRunning["summarization"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("summarization", { text });
     res.json({
@@ -512,6 +515,7 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
+    clearTimeout(summarizationReset);
     serviceRunning["summarization"] = false;
   }
 });
@@ -536,6 +540,7 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["code-review"] = true;
+  const codeReviewReset = setTimeout(() => { serviceRunning["code-review"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("code-review", { code, language });
     res.json({
@@ -549,6 +554,7 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
+    clearTimeout(codeReviewReset);
     serviceRunning["code-review"] = false;
   }
 });

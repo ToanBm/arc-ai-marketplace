@@ -325,16 +325,15 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
   await feedbackTx.wait();
   console.log(`  ✓ Rated ${chosenProvider.name}: 5/5`);
 
-  // Ask provider to rate us back
-  try {
-    await axios.post(`${chosenProvider.endpoint}/feedback`, {
-      taskId,
-      clientAddress: wallet.address,
-    });
+  // Ask provider to rate us back (best-effort, non-blocking)
+  axios.post(`${chosenProvider.endpoint}/feedback`, {
+    taskId,
+    clientAddress: wallet.address,
+  }, { timeout: 5000 }).then(() => {
     console.log(`  ✓ ${chosenProvider.name} submitted reciprocal feedback`);
-  } catch {
+  }).catch(() => {
     console.log(`  ⚠ Provider feedback request failed`);
-  }
+  });
 
   const finalScore = await reputation.getAverageScore(chosenProvider.wallet);
   const reputationScore = Number(finalScore) / 100;

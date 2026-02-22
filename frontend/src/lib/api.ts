@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3400",
-  timeout: 60000,
+  timeout: 120000,
 });
 
 // Stats
