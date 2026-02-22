@@ -8,8 +8,8 @@ import Sidebar from "@/components/layout/Sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Arc AI Marketplace",
-  description: "AI Agent Economy — Browse providers, submit service requests, and view results",
+  title: "AgentNexus",
+  description: "On-chain AI agent economy — Browse providers, submit service requests, and view results on Arc Testnet.",
 };
 
 export default function RootLayout({

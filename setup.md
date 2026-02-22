@@ -14,7 +14,7 @@
 | **PaymentEscrow** | `contracts/PaymentEscrow.sol` | USDC escrow with timeout/expiry (x402) | 172 |
 | **ArbitrationRegistry** | `contracts/ArbitrationRegistry.sol` | Dispute resolution with arbitrators | 168 |
 | **NegotiationManager** | `contracts/NegotiationManager.sol` | RFQ/bidding system for competitive pricing | 214 |
-| **MockUSDC** | `contracts/MockUSDC.sol` | Test ERC-20 (6 decimals, public mint) | 24 |
+| **TestToken** | `contracts/TestToken.sol` | Minimal ERC-20 for local Hardhat testing only | 24 |
 
 #### IdentityRegistry — What's Built
 - `registerAgent(name, endpoint, capabilities)` — register with capability tags
@@ -162,7 +162,7 @@
 - Discovery endpoints: `GET /api/services`, `GET /api/providers`, `GET /api/providers/:capability`
 - History + stats: `GET /api/history`, `GET /api/marketplace/stats`
 - Health check: `GET /api/health` — checks blockchain, contracts, all agents
-- Payment verification: validates MockUSDC Transfer events on-chain for user payments
+- Payment verification: validates USDC Transfer events on-chain for user payments
 - Concurrency gates: prevents overlapping requests per service type
 
 #### Legacy Dashboard (`dashboard/index.html`)
@@ -187,7 +187,7 @@
 - `/history` — Task history table
 
 #### Key Components
-- `Header.tsx` — App header with RainbowKit ConnectButton + MockUSDC balance display
+- `Header.tsx` — App header with RainbowKit ConnectButton + USDC balance display
 - `Sidebar.tsx` — Navigation sidebar
 - `ServiceCard.tsx` — Service card with price badge (e.g., "2.0 USDC")
 - `TranslationForm.tsx` — Translation form with wallet payment flow (USDC transfer → tx verification → service execution)
@@ -208,7 +208,7 @@
 1. User connects MetaMask via RainbowKit
 2. USDC balance displayed in header (fetched via `useTokenBalance`)
 3. User selects a service → form shows price on submit button ("Pay 2.0 USDC & Submit")
-4. On submit: frontend calls `MockUSDC.transfer(treasury, amount)` via wagmi `writeContractAsync`
+4. On submit: frontend calls `USDC.transfer(treasury, amount)` via wagmi `writeContractAsync`
 5. Waits for tx confirmation
 6. Sends API request to gateway with `paymentTxHash` in body
 7. Gateway verifies USDC Transfer event on-chain (checks recipient = treasury, amount >= required)
@@ -231,7 +231,7 @@
 
 ### 1.7 Known Issues Fixed
 - ThirdWeb RPC rate-limits at ~3 req/sec — deploy.ts now has 5s delays between contracts
-- MockUSDC was not minted during deploy — deploy.ts now auto-mints 1000 USDC to all signers
+- USDC was not minted during deploy — deploy.ts now auto-mints 1000 USDC to all signers (local only)
 - Dashboard requires manual copy-paste of RPC URL and contract addresses
 
 ---
@@ -257,7 +257,7 @@
 | Rate limiting | `standardLimiter` (30/min) + `oracleLimiter` (10/min) + `serviceLimiter` (10/min) built | Contract-level spam prevention (registration fee) |
 | API key auth | `apiKeyAuth` middleware built (disabled by default) | Enable in production, manage keys in UI |
 | Agent health checks | `/health` endpoint exists on all agents; health page in frontend | Automated monitoring + "Online" badge |
-| Real USDC | MockUSDC with public mint | Bridge or deploy with real USDC on mainnet |
+| Real USDC | Arc testnet USDC (0x3600...0000) | Bridge or deploy with real USDC on mainnet |
 | HTTPS | Not enforced | Require HTTPS for agent endpoints in production |
 | EIP-712 signatures | Not implemented | Agent-to-agent request authentication |
 | IdentityRegistry fields | name, endpoint, capabilities only | Add description, pricePerTask, apiSpecUrl |
@@ -394,7 +394,7 @@ frontend/
 │   ├── usePaymentEscrow.ts
 │   ├── useNegotiationManager.ts
 │   ├── useArbitrationRegistry.ts
-│   └── useMockUSDC.ts
+│   └── useUSDC.ts
 ├── lib/
 │   ├── contracts.ts             # Contract addresses + ABIs
 │   ├── chains.ts                # Arc Testnet chain config
@@ -570,7 +570,7 @@ arbitration.on("DisputeResolved", (taskId, ruling, arbitrator) => { ... });
 
 - **Balance panel**: USDC balance, ETH balance (for gas)
 - **Testnet faucet** (testnet only):
-  - "Mint 100 USDC" button -> calls `MockUSDC.mint(myAddress, 100_000_000)`
+  - "Mint 100 USDC" button (testnet only)
   - Link to Arc Testnet faucet for ETH
 - **Allowance**: USDC approved for escrow contract
   - "Approve USDC" button -> `USDC.approve(escrow, MAX_UINT256)` (one-time)
@@ -739,7 +739,7 @@ query OracleProviders($minScore: BigInt) {
 - [ ] Professional security audit (recommended before mainnet)
 - [ ] Gas optimization: batch operations, storage packing
 
-#### 8.2 Replace MockUSDC
+#### 8.2 Mainnet USDC
 
 - On Arc Mainnet: use the official USDC contract address
 - Update `config.contracts.usdc` and frontend `contracts.ts`

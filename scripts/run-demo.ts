@@ -1,7 +1,7 @@
 /**
  * End-to-End Demo Script (Hardhat-native, localhost only)
  *
- * NOTE: This script uses a local MockUSDC for Hardhat testing only.
+ * NOTE: This script uses a local TestToken for Hardhat testing only.
  *       On Arc Testnet, real USDC (0x3600000000000000000000000000000000000000) is used.
  *
  * Orchestrates the complete AI Agent Economy workflow:
@@ -29,10 +29,10 @@ import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signer
 async function deployContracts(deployer: HardhatEthersSigner) {
   console.log("[Deploy] Deploying contracts...");
 
-  const MockUSDC = await ethers.getContractFactory("MockUSDC", deployer);
-  const usdc = await MockUSDC.deploy();
+  const TestToken = await ethers.getContractFactory("TestToken", deployer);
+  const usdc = await TestToken.deploy("USD Coin", "USDC", 6);
   await usdc.waitForDeployment();
-  console.log(`  MockUSDC: ${await usdc.getAddress()}`);
+  console.log(`  TestToken (USDC): ${await usdc.getAddress()}`);
 
   const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry", deployer);
   const identity = await IdentityRegistry.deploy();

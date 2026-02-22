@@ -1,167 +1,208 @@
-# AI Agent Economy PoC — ERC-8004 + x402 + Chainlink
+# AgentNexus
 
-A proof-of-concept demonstrating an autonomous AI agent economy where:
+**An on-chain AI agent economy built on Arc Testnet.**
 
-- **Agent A** (Client Trading Bot) hires **Agent B** (Oracle Provider)
-- Agent B fetches real-time price data from Chainlink/CoinGecko and runs trend analysis
-- Agents discover each other on-chain via **ERC-8004 Identity Registry**
-- Payment is handled via **x402 HTTP 402** micropayments with USDC escrow
-- All work is verified on-chain with cryptographic proof-of-work hashes
-- Both agents build on-chain **reputation** through mutual feedback
-- A **Marketplace Frontend** lets users pay USDC to access AI services (translation, summarization, code review)
+AgentNexus is a decentralized marketplace where autonomous AI agents register, discover, and transact with each other — and with human users — using USDC micropayments settled through smart contracts.
+
+**Live:** `https://api.toanbm.xyz/arc`
+
+---
+
+## What It Does
+
+Users connect their wallet, pay USDC, and receive AI services (translation, summarization, code review, oracle price data). Every request runs a full 10-step on-chain workflow: task creation, escrow deposit, x402 payment proof, proof-of-work verification, escrow release, and mutual reputation feedback — all on-chain, all verifiable.
+
+Agents discover each other through an **ERC-8004 Identity Registry**, are ranked by on-chain **reputation scores**, and settle payments through a **USDC escrow** with cryptographic proof-of-work.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ARC TESTNET (Chain ID: 5042002)               │
-│                                                                  │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
-│  │  Identity     │ │  Reputation  │ │  Validation  │            │
-│  │  Registry     │ │  Registry    │ │  Registry    │            │
-│  │  (ERC-8004)   │ │  (ERC-8004)  │ │  (ERC-8004)  │            │
-│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘            │
-│         │                │                │                      │
-│  ┌──────┴────────────────┴────────────────┴──────┐              │
-│  │              PaymentEscrow (USDC)              │              │
-│  └───────────────────┬───────────────────────────┘              │
-└──────────────────────┼───────────────────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-   ┌────▼────┐   x402 HTTP 402  ┌────▼────┐
-   │ AGENT A  │◄────────────────►│ AGENT B  │
-   │ Trading  │  micropayments   │ Oracle   │
-   │ Bot      │                  │ Provider │
-   └─────────┘                   └────┬────┘
-                                      │
-                                 ┌────▼────┐
-                                 │Chainlink │
-                                 │/ CoinGecko│
-                                 └──────────┘
-
-   ┌───────────────────────────────────────────────────────┐
-   │              Marketplace Services                      │
-   │                                                        │
-   │  User (MetaMask)                                       │
-   │    │                                                   │
-   │    ├─ USDC Transfer ──► Treasury                       │
-   │    │                                                   │
-   │    └─ API Request ──► Gateway ──► Agent D (Translation)│
-   │                              ├──► Agent E (Summarize)  │
-   │                              └──► Agent F (Code Review)│
-   └───────────────────────────────────────────────────────┘
+┌──────────────────────────── ARC TESTNET (Chain ID: 5042002) ──────────────────────────────┐
+│                                                                                             │
+│  IdentityRegistry   ReputationRegistry   ValidationRegistry   PaymentEscrow   Arc USDC     │
+│  (ERC-8004)         (ERC-8004)           (ERC-8004)           (USDC escrow)   (ERC-20)     │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                          ▲
+                                          │  on-chain reads/writes
+                                          │
+┌─────────────────────────── API Gateway (port 3400) ────────────────────────────────────────┐
+│                                                                                             │
+│  POST /api/services/translation       ──► Agent D (Translation #1,  port 3404)             │
+│  POST /api/services/summarization     ──► Agent E (Summarization #1, port 3405)            │
+│  POST /api/services/code-review       ──► Agent F (Code Review #1,  port 3406)             │
+│                                       ──► Agent G (Translation #2,  port 3407)             │
+│                                       ──► Agent H (Summarization #2, port 3408)            │
+│                                       ──► Agent I (Code Review #2,  port 3409)             │
+│  POST /api/check (oracle workflow)    ──► Agent B (Oracle #1, port 3402)                   │
+│                                       ──► Agent C (Oracle #2, port 3403)                   │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+                                          ▲
+                                          │  HTTPS via nginx (/arc/ prefix)
+                                          │
+┌─────────────────────────── Next.js Frontend ───────────────────────────────────────────────┐
+│                                                                                             │
+│  /              Dashboard (health, stats, quick actions)                                    │
+│  /services      Marketplace (Translation · Summarization · Code Review)                    │
+│                 + live gateway log panel showing all 10 workflow steps                      │
+│  /providers     Browse registered agents, filter by capability, view reputation             │
+│  /history       Task history with result details                                            │
+│                                                                                             │
+│  Wallet: RainbowKit + wagmi v2 · USDC balance in header · MetaMask signing                 │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Marketplace — User Payment Flow
+---
 
-Users pay per request via MockUSDC transfers to a treasury address. The frontend prompts wallet signing, then submits the payment tx hash to the backend for on-chain verification.
+## 10-Step Marketplace Workflow
 
-| Service | Price | Raw Amount (6 decimals) |
-|---------|-------|-------------------------|
-| Translation | 2.0 USDC | `2000000` |
-| Summarization | 1.5 USDC | `1500000` |
-| Code Review | 3.0 USDC | `3000000` |
+Every service request runs this workflow automatically:
 
-**Flow:**
-1. User connects wallet (MetaMask/RainbowKit)
-2. User fills service form, clicks "Pay X USDC & Submit"
-3. Frontend calls `MockUSDC.transfer(treasury, amount)` via wagmi
-4. Frontend sends API request with `paymentTxHash`
-5. Gateway verifies the USDC Transfer event on-chain
-6. Service agent processes the request and returns result
+| Step | Action | Where |
+|------|--------|--------|
+| 1 | Register Marketplace Client in IdentityRegistry | On-chain |
+| 2 | Discover providers by capability tag | On-chain read |
+| 3 | Rank providers by reputation score + task count | On-chain read |
+| 4 | Verify chosen provider is online + fetch price | HTTP `/capabilities` |
+| 5 | Create task in ValidationRegistry | On-chain write |
+| 6 | Approve + deposit USDC into PaymentEscrow | On-chain write |
+| 7 | x402 flow: send request → receive 402 → re-send with signed payment proof | HTTP |
+| 8 | Verify result hash on-chain (ValidationRegistry) | On-chain write |
+| 9 | Release USDC from escrow to provider | On-chain write |
+| 10 | Submit mutual reputation feedback | On-chain write |
 
-## Workflow (Oracle — Agent A ↔ Agent B)
+The frontend's **Gateway Log Panel** shows each step appearing in real time as the workflow executes.
 
-| Step | Action | On-Chain |
-|------|--------|----------|
-| 1. Discovery | Agent A queries IdentityRegistry for `"oracle"` capability | Read |
-| 2. Reputation | Agent A checks Agent B's score in ReputationRegistry | Read |
-| 3. Task Creation | Agent A registers task in ValidationRegistry | Write |
-| 4. Escrow Deposit | Agent A locks USDC in PaymentEscrow (x402 pre-payment) | Write |
-| 5. x402 Flow | Agent A sends HTTP request → 402 → pays → re-requests with proof | HTTP + Read |
-| 6. Execution | Agent B fetches oracle data, submits proof hash to ValidationRegistry | Write |
-| 7. Verification | Agent A verifies result hash on-chain, marks task Verified | Write |
-| 8. Payment | Agent A releases USDC from escrow to Agent B | Write |
-| 9. Reputation | Both agents submit mutual feedback to ReputationRegistry | Write |
+---
+
+## Agents
+
+| Agent | Role | Port | Price |
+|-------|------|------|-------|
+| Agent B | Oracle Provider #1 — ETH/USD, BTC/USD via Chainlink/CoinGecko | 3402 | 5 USDC |
+| Agent C | Oracle Provider #2 — ETH/USD, BTC/USD, SOL/USD (multi-source, cheaper) | 3403 | 3 USDC |
+| Agent D | Translation Service #1 | 3404 | 2 USDC |
+| Agent E | Summarization Service #1 | 3405 | 1.5 USDC |
+| Agent F | Code Review Service #1 | 3406 | 3 USDC |
+| Agent G | Translation Service #2 (Budget) | 3407 | 2 USDC |
+| Agent H | Summarization Service #2 (Analytical) | 3408 | 1.5 USDC |
+| Agent I | Code Review Service #2 (Security-focused) | 3409 | 3 USDC |
+
+Agent A (Client Trading Bot) and Marketplace Client are invoked on-demand, not long-running servers.
+
+All agents:
+- Register themselves in the on-chain IdentityRegistry on startup
+- Implement the x402 micropayment protocol (respond 402, verify escrow on-chain, deliver result)
+- Submit cryptographic proof-of-work hashes to the ValidationRegistry
+- Build on-chain reputation through mutual feedback after each task
+
+---
+
+## Smart Contracts
+
+All deployed on Arc Testnet (Chain ID: 5042002).
+
+| Contract | Purpose |
+|----------|---------|
+| `IdentityRegistry` | ERC-8004 agent registration, capability-based discovery, DID generation |
+| `ReputationRegistry` | On-chain reputation scores (1–5 scale), feedback audit trail |
+| `ValidationRegistry` | Task records + cryptographic proof-of-work hashes |
+| `PaymentEscrow` | USDC escrow with 1-hour timeout, SafeERC20 transfer |
+| `ArbitrationRegistry` | Dispute resolution — file, evidence, arbitrator ruling |
+| `NegotiationManager` | RFQ/bidding system for competitive pricing |
+
+---
 
 ## Project Structure
 
 ```
-arc-8004/
-├── contracts/
-│   ├── IdentityRegistry.sol    # ERC-8004 agent identity & discovery
-│   ├── ReputationRegistry.sol  # On-chain reputation scoring
-│   ├── ValidationRegistry.sol  # Proof-of-work task records
-│   ├── PaymentEscrow.sol       # x402 USDC escrow settlement
-│   ├── ArbitrationRegistry.sol # Dispute resolution with arbitrators
-│   ├── NegotiationManager.sol  # RFQ/bidding for competitive pricing
-│   └── MockUSDC.sol            # Test ERC-20 token (6 decimals)
+arc-agent/
+├── contracts/                          # Solidity smart contracts
+│   ├── IdentityRegistry.sol
+│   ├── ReputationRegistry.sol
+│   ├── ValidationRegistry.sol
+│   ├── PaymentEscrow.sol
+│   ├── ArbitrationRegistry.sol
+│   └── NegotiationManager.sol
 ├── agents/
 │   ├── shared/
-│   │   ├── config.ts           # Shared config (RPC, keys, addresses, treasury)
-│   │   ├── abis.ts             # Minimal contract ABIs
-│   │   ├── chainlink.ts        # Oracle data fetcher (CoinGecko + Chainlink)
-│   │   ├── x402.ts             # x402 protocol helpers
-│   │   ├── middleware.ts       # Express middleware (rate limit, auth, logging)
-│   │   └── storage.ts          # SQLite persistence (better-sqlite3)
-│   ├── agentA/client.ts        # Agent A: Client Trading Bot
-│   ├── agentB/server.ts        # Agent B: Oracle Provider #1 (port 3402)
-│   ├── agentC/server.ts        # Agent C: Oracle Provider #2 (port 3403)
-│   ├── agentD/server.ts        # Agent D: Translation Service (port 3404)
-│   ├── agentE/server.ts        # Agent E: Summarization Service (port 3405)
-│   ├── agentF/server.ts        # Agent F: Code Review Service (port 3406)
-│   └── marketplace/client.ts   # Marketplace orchestrator
+│   │   ├── config.ts                   # RPC, private keys, contract addresses, ports
+│   │   ├── abis.ts                     # Minimal ABIs for all 7 contracts
+│   │   ├── x402.ts                     # x402 protocol (buildPaymentRequest, buildPaymentProof)
+│   │   ├── escrow.ts                   # getEscrowData() with fresh provider + retry logic
+│   │   ├── chainlink.ts                # Oracle: Chainlink → CoinGecko → simulated fallback
+│   │   ├── middleware.ts               # Rate limiting, API key auth, request logger
+│   │   └── storage.ts                  # SQLite (oracle_results, task_records, payment_proofs, service_results)
+│   ├── agentA/client.ts                # Client Trading Bot (on-demand)
+│   ├── agentB/server.ts                # Oracle Provider #1 (port 3402)
+│   ├── agentC/server.ts                # Oracle Provider #2 (port 3403)
+│   ├── agentD/server.ts                # Translation #1 (port 3404)
+│   ├── agentE/server.ts                # Summarization #1 (port 3405)
+│   ├── agentF/server.ts                # Code Review #1 (port 3406)
+│   ├── agentG/server.ts                # Translation #2 Budget (port 3407)
+│   ├── agentH/server.ts                # Summarization #2 Analytical (port 3408)
+│   ├── agentI/server.ts                # Code Review #2 Security (port 3409)
+│   ├── marketplace/client.ts           # Marketplace orchestrator (10-step workflow)
+│   └── data/agent.db                   # SQLite database
 ├── dashboard/
-│   ├── server.ts               # API Gateway (port 3400) — routes, pricing, tx verification
-│   └── index.html              # Legacy monitoring dashboard
+│   └── server.ts                       # API Gateway (port 3400)
 ├── frontend/
 │   └── src/
 │       ├── app/
-│       │   ├── layout.tsx      # Root layout with wallet provider
-│       │   ├── page.tsx        # Dashboard home
-│       │   ├── providers.tsx   # wagmi + RainbowKit providers
-│       │   ├── services/page.tsx   # Marketplace services page
-│       │   ├── providers/page.tsx  # Agent providers browser
-│       │   └── history/page.tsx    # Task history
+│       │   ├── layout.tsx
+│       │   ├── page.tsx                # Dashboard home
+│       │   ├── services/page.tsx       # Marketplace + gateway log panel
+│       │   ├── providers/page.tsx      # Agent browser
+│       │   └── history/page.tsx        # Task history
 │       ├── components/
-│       │   ├── layout/
-│       │   │   ├── Header.tsx      # App header with ConnectButton + USDC balance
-│       │   │   └── Sidebar.tsx     # Navigation sidebar
-│       │   ├── services/
-│       │   │   ├── ServiceCard.tsx      # Service card with price badge
-│       │   │   ├── TranslationForm.tsx  # Translation form with USDC payment
-│       │   │   ├── SummarizationForm.tsx # Summarization form with USDC payment
-│       │   │   ├── CodeReviewForm.tsx   # Code review form with USDC payment
-│       │   │   └── ServiceResult.tsx    # Result display component
-│       │   ├── dashboard/
-│       │   │   ├── StatsCards.tsx       # Aggregate stats
-│       │   │   ├── HealthStatus.tsx     # System health indicators
-│       │   │   └── QuickActions.tsx     # Quick action buttons
-│       │   ├── providers/
-│       │   │   ├── ProviderCard.tsx     # Provider info card
-│       │   │   └── CapabilityFilter.tsx # Filter by capability
-│       │   └── history/
-│       │       └── TaskTable.tsx        # Task history table
+│       │   ├── layout/                 # Header (wallet + USDC balance), Sidebar
+│       │   ├── services/               # ServiceCard, TranslationForm, SummarizationForm,
+│       │   │                           # CodeReviewForm, ServiceResult, GatewayLogPanel
+│       │   ├── dashboard/              # StatsCards, HealthStatus, QuickActions
+│       │   ├── providers/              # ProviderCard, CapabilityFilter
+│       │   └── history/                # TaskTable
 │       └── lib/
-│           ├── api.ts          # Axios API client (with paymentTxHash support)
-│           ├── contracts.ts    # ERC20 ABI, SERVICE_PRICES, TREASURY_ADDRESS
-│           ├── hooks.ts        # SWR hooks (usePricing, useConfig, useTokenBalance, etc.)
-│           ├── wagmi.ts        # wagmi config (Hardhat + Arc Testnet chains)
-│           └── utils.ts        # Formatting helpers
+│           ├── api.ts                  # Axios client (baseURL from NEXT_PUBLIC_API_URL, 120s timeout)
+│           ├── contracts.ts            # ERC20 ABI, TREASURY_ADDRESS
+│           ├── hooks.ts                # SWR hooks: useStats, useHealth, useProviders, useHistory,
+│           │                           # useConfig, useQuote, useTokenBalance
+│           ├── wagmi.ts                # wagmi config (Hardhat + Arc Testnet)
+│           └── utils.ts
 ├── scripts/
-│   ├── deploy.ts               # Contract deployment script
-│   └── run-demo.ts             # Full E2E demo orchestrator
+│   ├── deploy.ts                       # Deploy all 7 contracts + mint test USDC
+│   └── run-demo.ts                     # E2E demo orchestrator
 ├── test/
-│   └── full-flow.test.ts       # Contract + integration tests
-├── subgraph/                   # Scaffolded (handlers not implemented)
-│   ├── subgraph.yaml
-│   ├── schema.graphql
-│   └── src/                    # Stub mapping files
+│   └── full-flow.test.ts
+├── ecosystem.config.js                 # PM2 config for all agents + gateway
 ├── hardhat.config.ts
-├── package.json
-└── .env.example
+└── .env
 ```
+
+---
+
+## API Gateway Endpoints
+
+Base URL (production): `https://api.toanbm.xyz/arc`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/config` | RPC URL + all contract addresses |
+| `GET` | `/api/health` | System health (blockchain, contracts, all agents) |
+| `GET` | `/api/services` | Available service types |
+| `GET` | `/api/providers` | All registered agents with reputation |
+| `GET` | `/api/providers/:capability` | Filter providers by capability tag |
+| `GET` | `/api/quote/:service` | Live price from top-ranked provider (30s cache) |
+| `POST` | `/api/services/translation` | Translation request |
+| `POST` | `/api/services/summarization` | Summarization request |
+| `POST` | `/api/services/code-review` | Code review request |
+| `POST` | `/api/check` | Oracle workflow (Agent A → B/C) |
+| `GET` | `/api/history` | Recent task history |
+| `GET` | `/api/marketplace/stats` | Aggregate marketplace stats |
+| `GET` | `/api/pricing` | Treasury address |
+| `GET` | `/api/supported-pairs` | Supported trading pairs for oracle |
+
+---
 
 ## Quick Start
 
@@ -169,212 +210,166 @@ arc-8004/
 
 - Node.js >= 18
 - npm
-- MetaMask or compatible wallet browser extension
+- MetaMask or compatible wallet
 
-### Setup
+### Install
 
 ```bash
-# Install dependencies
 npm install
-
-# Install frontend dependencies
 npm run frontend:install
-
-# Compile contracts
 npx hardhat compile
 ```
 
-### Run Tests
+### Run Locally
 
 ```bash
-npx hardhat test
-```
-
-### Run Locally (Full Stack)
-
-```bash
-# Terminal 1: Start local blockchain
+# Terminal 1 — local blockchain
 npm run node
 
-# Terminal 2: Deploy contracts
+# Terminal 2 — deploy contracts
 npm run deploy:local
 
-# Terminal 3: Start Agent D (Translation)
-npm run agent:d
+# Terminals 3–5 — service agents
+npm run agent:d    # Translation  (port 3404)
+npm run agent:e    # Summarization (port 3405)
+npm run agent:f    # Code Review  (port 3406)
 
-# Terminal 4: Start Agent E (Summarization)
-npm run agent:e
+# Terminal 6 — API Gateway
+npm run gateway    # port 3400
 
-# Terminal 5: Start Agent F (Code Review)
-npm run agent:f
-
-# Terminal 6: Start API Gateway
-npm run gateway
-
-# Terminal 7: Start frontend
-npm run frontend:dev
+# Terminal 7 — frontend
+npm run frontend:dev   # port 3000
 ```
 
-Then:
-1. Open http://localhost:3000
-2. Import a Hardhat account into MetaMask (has MockUSDC from deployment)
-3. Connect wallet — USDC balance shows in header
-4. Go to Services → pick a service → see price on button
-5. Submit → wallet prompts USDC transfer → approve → service executes → result shows
+Open http://localhost:3000, connect MetaMask (import any Hardhat account — it has test USDC), go to Services, and submit a request.
 
-### Deploy to Arc Testnet
+### Run on Arc Testnet
 
 ```bash
-# 1. Copy and fill in your .env
+# 1. Configure environment
 cp .env.example .env
-# Edit .env with funded wallet keys for Arc Testnet
+# Fill in funded private keys and ARC_RPC_URL
 
 # 2. Deploy contracts
 npm run deploy:arc
+# Copy printed addresses into .env
 
-# 3. Copy printed addresses into .env
+# 3. Start all agents + gateway via PM2
+npm install -g pm2
+pm2 start ecosystem.config.js
 
-# 4. Start service agents
-npm run agent:d   # Translation (port 3404)
-npm run agent:e   # Summarization (port 3405)
-npm run agent:f   # Code Review (port 3406)
+# 4. Check status
+pm2 status
+pm2 logs
 
-# 5. Start gateway + frontend
-npm run gateway
+# 5. Frontend (local dev against remote gateway)
+# Set NEXT_PUBLIC_API_URL=https://your-domain.com/arc in frontend/.env.local
 npm run frontend:dev
 ```
 
-## Smart Contracts
+### PM2 Commands
 
-### IdentityRegistry (ERC-8004)
+```bash
+pm2 start ecosystem.config.js    # Start all agents + gateway
+pm2 stop ecosystem.config.js     # Stop all
+pm2 restart ecosystem.config.js  # Restart all
+pm2 restart gateway               # Restart a single process
+pm2 logs                          # Stream all logs
+pm2 logs gateway --lines 50       # Gateway logs only
+pm2 monit                         # Process monitor
+pm2 save && pm2 startup           # Persist across reboots
+```
 
-Agents register with name, endpoint, and capability tags. Other agents discover peers by querying capabilities.
+---
 
-**Key functions:**
-- `registerAgent(name, endpoint, capabilities)` — Register a new agent
-- `findByCapability(tag)` — Discover agents by capability
-- `getAgent(address)` — Look up a specific agent
+## User Payment Flow
 
-### ReputationRegistry (ERC-8004)
+| Step | Action |
+|------|--------|
+| 1 | Connect MetaMask via RainbowKit |
+| 2 | Select a service — price shown on the submit button |
+| 3 | Click "Pay X USDC & Submit" |
+| 4 | Frontend calls `USDC.transfer(treasury, amount)` via wagmi |
+| 5 | Frontend sends request to gateway with `paymentTxHash` |
+| 6 | Gateway verifies the USDC Transfer event on-chain |
+| 7 | Gateway runs the 10-step marketplace workflow |
+| 8 | Result displayed, gateway log panel shows all steps |
 
-Tracks cumulative reputation scores (1-5 scale) for each agent across tasks.
+Service prices:
 
-**Key functions:**
-- `submitFeedback(toAgent, taskId, score, comment)` — Rate an agent
-- `getAverageScore(agent)` — Get average score (scaled x100)
-- `getSuccessRate(agent)` — Get percentage of tasks rated >= 3
+| Service | Price |
+|---------|-------|
+| Translation | 2.0 USDC |
+| Summarization | 1.5 USDC |
+| Code Review | 3.0 USDC |
 
-### ValidationRegistry (ERC-8004)
-
-Stores task records with cryptographic proof-of-work hashes for verification.
-
-**Key functions:**
-- `createTask(taskId, provider, description)` — Create a new task
-- `submitResult(taskId, resultHash, resultUri)` — Submit proof-of-work
-- `verifyResult(taskId)` / `disputeResult(taskId)` — Accept or reject
-- `verifyHash(taskId, dataHash)` — Check if a hash matches on-chain
-
-### PaymentEscrow (x402)
-
-USDC escrow for "no work, no pay" settlement. Funds are locked until the requester verifies and releases.
-
-**Key functions:**
-- `deposit(taskId, payee, amount)` — Lock USDC for a task
-- `release(taskId)` — Pay the provider
-- `refund(taskId)` — Refund on dispute
-
-### ArbitrationRegistry
-
-Dispute resolution with arbitrator panel. Payer files dispute, payee submits evidence, arbitrator rules.
-
-**Key functions:**
-- `fileDispute(taskId, payee, reason)` — Initiate dispute
-- `submitEvidence(taskId, evidence)` — Counter-evidence
-- `resolve(taskId, ruling, rulingReason)` — Arbitrator decides
-
-### NegotiationManager
-
-RFQ/bidding system for competitive pricing between service providers.
-
-**Key functions:**
-- `createRfq(rfqId, capability, description, maxBudget, biddingTime)` — Post RFQ
-- `submitBid(rfqId, bidId, price, estimatedTime, terms)` — Provider bids
-- `awardBid(rfqId, bidId)` — Requester picks winner
-
-## API Gateway Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/config` | RPC URL + contract addresses |
-| `GET` | `/api/pricing` | Treasury address + per-service prices |
-| `GET` | `/api/health` | System health check (blockchain, contracts, agents) |
-| `GET` | `/api/services` | List available service types |
-| `GET` | `/api/providers` | All registered agents with reputation |
-| `GET` | `/api/providers/:capability` | Filter providers by capability |
-| `POST` | `/api/services/translation` | Submit translation (accepts `paymentTxHash`) |
-| `POST` | `/api/services/summarization` | Submit summarization (accepts `paymentTxHash`) |
-| `POST` | `/api/services/code-review` | Submit code review (accepts `paymentTxHash`) |
-| `POST` | `/api/check` | Oracle workflow (Agent A → Agent B) |
-| `GET` | `/api/history` | Recent task history |
-| `GET` | `/api/marketplace/stats` | Aggregate marketplace stats |
+---
 
 ## Configuration
 
-All configuration is via environment variables (`.env`):
+**Backend** (`.env`):
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PRIVATE_KEY_AGENT_A` | Agent A wallet private key | Hardhat #0 |
-| `PRIVATE_KEY_AGENT_B` | Agent B wallet private key | Hardhat #1 |
-| `PRIVATE_KEY_AGENT_C` | Agent C wallet private key | Hardhat #2 |
-| `PRIVATE_KEY_AGENT_D` | Agent D (Translation) private key | Hardhat #3 |
-| `PRIVATE_KEY_AGENT_E` | Agent E (Summarization) private key | Hardhat #4 |
-| `PRIVATE_KEY_AGENT_F` | Agent F (Code Review) private key | Hardhat #5 |
-| `PRIVATE_KEY_MARKETPLACE` | Marketplace client key | Hardhat #6 |
-| `TREASURY_ADDRESS` | Treasury for user payments | Hardhat #7 |
-| `ARC_RPC_URL` | RPC endpoint | `http://127.0.0.1:8545` |
-| `USDC_ADDRESS` | MockUSDC contract address | — |
-| `IDENTITY_REGISTRY_ADDRESS` | IdentityRegistry address | — |
-| `REPUTATION_REGISTRY_ADDRESS` | ReputationRegistry address | — |
-| `VALIDATION_REGISTRY_ADDRESS` | ValidationRegistry address | — |
-| `PAYMENT_ESCROW_ADDRESS` | PaymentEscrow address | — |
-| `ARBITRATION_REGISTRY_ADDRESS` | ArbitrationRegistry address | — |
-| `NEGOTIATION_MANAGER_ADDRESS` | NegotiationManager address | — |
-| `GATEWAY_PORT` | API Gateway port | `3400` |
-| `AGENT_B_PORT` | Agent B HTTP server port | `3402` |
-| `AGENT_D_PORT` | Agent D (Translation) port | `3404` |
-| `AGENT_E_PORT` | Agent E (Summarization) port | `3405` |
-| `AGENT_F_PORT` | Agent F (Code Review) port | `3406` |
+| Variable | Description |
+|----------|-------------|
+| `PRIVATE_KEY_AGENT_A` – `PRIVATE_KEY_AGENT_I` | Wallet keys for each agent |
+| `PRIVATE_KEY_MARKETPLACE` | Marketplace client wallet |
+| `TREASURY_ADDRESS` | Receives user USDC payments |
+| `ARC_RPC_URL` | Arc Testnet RPC (e.g. `https://5042002.rpc.thirdweb.com`) |
+| `USDC_ADDRESS` | Arc USDC contract address |
+| `IDENTITY_REGISTRY_ADDRESS` | IdentityRegistry contract |
+| `REPUTATION_REGISTRY_ADDRESS` | ReputationRegistry contract |
+| `VALIDATION_REGISTRY_ADDRESS` | ValidationRegistry contract |
+| `PAYMENT_ESCROW_ADDRESS` | PaymentEscrow contract |
+| `GATEWAY_PORT` | API Gateway port (default: `3400`) |
+| `AGENT_B_PORT` / `AGENT_B_URL` | Agent B address (default: `3402`) |
+| `AGENT_C_PORT` through `AGENT_I_PORT` | Agent ports `3403`–`3409` |
+
+**Frontend** (`frontend/.env.local`):
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Gateway URL (`https://api.toanbm.xyz/arc` or `http://localhost:3400`) |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID |
+| `NEXT_PUBLIC_TREASURY_ADDRESS` | Treasury address for USDC payments |
+
+---
 
 ## npm Scripts
 
 ```bash
-npm run compile        # Compile contracts
-npm run test           # Run tests
-npm run deploy:local   # Deploy to localhost
-npm run deploy:arc     # Deploy to Arc Testnet
-npm run node           # Start Hardhat local node
-npm run gateway        # Start API Gateway (port 3400)
-npm run frontend:dev   # Start Next.js frontend (port 3000)
+npm run compile          # Compile contracts
+npm run test             # Run tests
+npm run deploy:local     # Deploy to Hardhat localhost
+npm run deploy:arc       # Deploy to Arc Testnet
+npm run node             # Start Hardhat local node
+npm run gateway          # Start API Gateway (port 3400)
+npm run frontend:dev     # Start Next.js frontend (port 3000)
 npm run frontend:install # Install frontend dependencies
-npm run agent:a        # Agent A — Client Trading Bot
-npm run agent:b        # Agent B — Oracle Provider #1 (port 3402)
-npm run agent:c        # Agent C — Oracle Provider #2 (port 3403)
-npm run agent:d        # Agent D — Translation Service (port 3404)
-npm run agent:e        # Agent E — Summarization Service (port 3405)
-npm run agent:f        # Agent F — Code Review Service (port 3406)
-npm run marketplace    # Marketplace orchestrator
-npm run demo           # Run E2E demo (ts-node)
-npm run demo:local     # Run E2E demo (hardhat localhost)
+npm run agent:a          # Agent A — Client Trading Bot (on-demand)
+npm run agent:b          # Agent B — Oracle Provider #1 (port 3402)
+npm run agent:c          # Agent C — Oracle Provider #2 (port 3403)
+npm run agent:d          # Agent D — Translation #1 (port 3404)
+npm run agent:e          # Agent E — Summarization #1 (port 3405)
+npm run agent:f          # Agent F — Code Review #1 (port 3406)
+npm run agent:g          # Agent G — Translation #2 (port 3407)
+npm run agent:h          # Agent H — Summarization #2 (port 3408)
+npm run agent:i          # Agent I — Code Review #2 (port 3409)
+npm run marketplace      # Marketplace orchestrator (on-demand)
+npm run demo             # E2E demo script
 ```
+
+---
 
 ## Tech Stack
 
-- **Smart Contracts**: Solidity 0.8.24, OpenZeppelin 5.x
-- **Framework**: Hardhat with TypeChain
-- **Agents**: TypeScript, Express.js, ethers.js v6
-- **Frontend**: Next.js 14 (App Router), wagmi v2, viem, RainbowKit, Tailwind CSS, SWR
-- **Oracle**: CoinGecko API (Chainlink Aggregator on supported networks)
-- **Storage**: SQLite (better-sqlite3)
-- **Testing**: Mocha + Chai via Hardhat Toolbox
-- **Network**: Arc Testnet (Chain ID: 5042002) or local Hardhat (Chain ID: 31337)
+| Layer | Technology |
+|-------|-----------|
+| Smart Contracts | Solidity 0.8.24, OpenZeppelin 5.x, Hardhat + TypeChain |
+| Agents | TypeScript, Express.js, ethers.js v6 |
+| Storage | SQLite (better-sqlite3) |
+| Frontend | Next.js 14 (App Router), wagmi v2, viem, RainbowKit, Tailwind CSS, SWR |
+| Process Manager | PM2 (ecosystem.config.js) |
+| Reverse Proxy | nginx (HTTPS, `/arc/` path prefix) |
+| Oracle Data | Chainlink on-chain → CoinGecko API → simulated fallback |
+| Network | Arc Testnet (Chain ID: 5042002) or Hardhat local (Chain ID: 31337) |
+| Testing | Mocha + Chai via Hardhat Toolbox |

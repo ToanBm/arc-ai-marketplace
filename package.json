@@ -1,5 +1,5 @@
 {
-  "name": "arc-8004-ai-agent-economy",
+  "name": "agentnexus",
   "version": "1.0.0",
   "description": "AI Agent Economy PoC using ERC-8004, x402, and Chainlink on Arc Testnet",
   "scripts": {

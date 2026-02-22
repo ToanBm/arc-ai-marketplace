@@ -6,10 +6,10 @@ describe("AI Agent Economy – Full Flow", function () {
   async function deployAll() {
     const [deployer, agentA, agentB, agentC, arbitrator] = await ethers.getSigners();
 
-    // MockUSDC is used for local Hardhat testing only.
+    // TestToken is used for local Hardhat testing only.
     // On Arc Testnet, real USDC at 0x3600000000000000000000000000000000000000 is used.
-    const MockUSDC = await ethers.getContractFactory("MockUSDC");
-    const usdc = await MockUSDC.deploy();
+    const TestToken = await ethers.getContractFactory("TestToken");
+    const usdc = await TestToken.deploy("USD Coin", "USDC", 6);
 
     const IdentityRegistry = await ethers.getContractFactory("IdentityRegistry");
     const identity = await IdentityRegistry.deploy();
@@ -33,7 +33,7 @@ describe("AI Agent Economy – Full Flow", function () {
     const NegotiationManager = await ethers.getContractFactory("NegotiationManager");
     const negotiation = await NegotiationManager.deploy();
 
-    // Mint USDC to Agent A (1000 USDC)
+    // Mint test tokens to Agent A (1000 USDC equivalent)
     await usdc.mint(agentA.address, 1_000_000_000n); // 1000 * 10^6
 
     return { deployer, agentA, agentB, agentC, arbitrator, usdc, identity, reputation, validation, escrow, arbitration, negotiation };
