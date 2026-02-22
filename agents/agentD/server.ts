@@ -244,8 +244,9 @@ app.post("/service/request", serviceLimiter, async (req: Request, res: Response)
 
     savePaymentProof(taskId, proof.txHash, proof.payer, escrowData.amount.toString());
     markPaymentVerified(taskId);
-  } catch {
-    res.status(500).json({ error: "Failed to verify payment on-chain" });
+  } catch (err: any) {
+    console.error(`[Agent D] Escrow verification failed:`, err.message);
+    res.status(500).json({ error: "Failed to verify payment on-chain", detail: err.message });
     return;
   }
 
