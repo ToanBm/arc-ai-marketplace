@@ -16,7 +16,6 @@ import {
   IDENTITY_REGISTRY_ABI,
   VALIDATION_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
-  PAYMENT_ESCROW_ABI,
 } from "../shared/abis";
 import {
   buildPaymentRequest,
@@ -39,6 +38,7 @@ import {
   getStats,
   closeDb,
 } from "../shared/storage";
+import { getEscrowData } from "../shared/escrow";
 
 // ── Setup ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,6 @@ const wallet = new ethers.Wallet(config.agentIKey, provider);
 const identity   = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, wallet);
 const validation  = new ethers.Contract(config.contracts.validation, VALIDATION_REGISTRY_ABI, wallet);
 const reputation  = new ethers.Contract(config.contracts.reputation, REPUTATION_REGISTRY_ABI, wallet);
-const escrow      = new ethers.Contract(config.contracts.escrow, PAYMENT_ESCROW_ABI, provider);
 
 const AGENT_I_PRICE = 2_000_000n; // 2 USDC — 33% cheaper than Agent F's 3 USDC
 
@@ -454,7 +453,7 @@ app.post("/service/request", serviceLimiter, async (req: Request, res: Response)
   }
 
   try {
-    const escrowData = await escrow.getEscrow(taskId);
+    const escrowData = await getEscrowData(taskId);
     const isFunded = escrowData.status === 1n;
     const correctPayee = escrowData.payee.toLowerCase() === wallet.address.toLowerCase();
     const correctAmount = escrowData.amount >= AGENT_I_PRICE;
@@ -466,7 +465,8 @@ app.post("/service/request", serviceLimiter, async (req: Request, res: Response)
 
     savePaymentProof(taskId, proof.txHash, proof.payer, escrowData.amount.toString());
     markPaymentVerified(taskId);
-  } catch {
+  } catch (err: any) {
+    console.error(`[Agent I] Escrow verification failed:`, err.message);
     res.status(500).json({ error: "Failed to verify payment on-chain" });
     return;
   }
@@ -512,7 +512,7 @@ app.post("/feedback", async (req: Request, res: Response) => {
   let comment = "Prompt payment and verification";
 
   try {
-    const escrowData = await escrow.getEscrow(taskId);
+    const escrowData = await getEscrowData(taskId);
     if (escrowData.status === 2n) {
       score = 5; comment = "Payment released promptly after verification";
     } else if (escrowData.status === 1n) {

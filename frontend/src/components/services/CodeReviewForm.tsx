@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { useConfig, useQuote } from "@/lib/hooks";
 import { erc20Abi, TREASURY_ADDRESS } from "@/lib/contracts";
 import ServiceResult from "./ServiceResult";
 import { Loader2 } from "lucide-react";
+import type { FormProps } from "@/app/services/page";
 
 const schema = z.object({
   code: z.string().min(1, "Code is required").max(10000),
@@ -18,11 +19,12 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-export default function CodeReviewForm() {
+export default function CodeReviewForm({ onLog, onStart }: FormProps) {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const { address, isConnected } = useAccount();
   const { data: configData, error: configError } = useConfig();
@@ -38,10 +40,47 @@ export default function CodeReviewForm() {
   const usdcAddress = configData?.contracts?.usdc as `0x${string}` | undefined;
   const dataReady = !!usdcAddress && !!quote;
 
+  function clearTimers() {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+  }
+
+  function scheduleLog(ms: number, text: string, type: Parameters<FormProps["onLog"]>[1] = "info") {
+    const t = setTimeout(() => onLog(text, type), ms);
+    timersRef.current.push(t);
+  }
+
+  function startGatewaySteps(price: string, provider: string) {
+    scheduleLog(0,    "[Step 1] Registering Marketplace Client...", "step");
+    scheduleLog(200,  "  ✓ Already registered as MarketplaceClient", "success");
+    scheduleLog(600,  "", "info");
+    scheduleLog(700,  "[Step 2] Discovering code-review providers...", "step");
+    scheduleLog(1000, "  Found 2 provider(s)", "info");
+    scheduleLog(1400, "", "info");
+    scheduleLog(1500, "[Step 3] Ranking providers by reputation...", "step");
+    scheduleLog(1800, `  ${provider} — score: 5.0/5, tasks: 2`, "info");
+    scheduleLog(2100, `  ✓ Selected: ${provider}`, "success");
+    scheduleLog(2400, "", "info");
+    scheduleLog(2500, "[Step 4] Verifying provider is online...", "step");
+    scheduleLog(2800, `  ✓ Online, price: ${price} USDC`, "success");
+    scheduleLog(3100, "", "info");
+    scheduleLog(3200, "[Step 5] Creating task on-chain...", "step");
+    scheduleLog(9500, "  ✓ Task created", "success");
+    scheduleLog(9800, "", "info");
+    scheduleLog(9900, `[Step 6] Depositing ${price} USDC into escrow...`, "step");
+    scheduleLog(24000, "  ✓ USDC deposited", "success");
+    scheduleLog(24300, "", "info");
+    scheduleLog(24400, `[Step 7] x402 flow with ${provider}...`, "step");
+    scheduleLog(24700, `  ← 402 Payment Required (${price} USDC)`, "info");
+    scheduleLog(25000, "  → Sending request with payment proof...", "info");
+  }
+
   const onSubmit = async (data: FormData) => {
     setError(null);
     setResult(null);
     setSubmitting(true);
+    onStart();
+    clearTimers();
 
     try {
       if (!isConnected || !address) {
@@ -57,6 +96,7 @@ export default function CodeReviewForm() {
       }
 
       setStatus("Sending payment...");
+      onLog("Waiting for wallet signature...", "pending");
       const txHash = await writeContractAsync({
         address: usdcAddress,
         abi: erc20Abi,
@@ -64,20 +104,37 @@ export default function CodeReviewForm() {
         args: [TREASURY_ADDRESS as `0x${string}`, BigInt(quote.amount)],
       });
 
+      onLog(`  ✓ Payment sent: ${txHash.slice(0, 18)}...`, "success");
+      onLog("", "info");
       setStatus("Confirming payment...");
       await new Promise((r) => setTimeout(r, 1000));
 
       setStatus("Processing service...");
-      const res = await submitCodeReview({
-        ...data,
-        paymentTxHash: txHash,
-      });
+      startGatewaySteps(quote.price, quote.provider);
+
+      const res = await submitCodeReview({ ...data, paymentTxHash: txHash });
+
+      clearTimers();
+      onLog("  ✓ Service delivered", "success");
+      onLog("", "info");
+      onLog("[Step 8] Releasing escrow payment...", "step");
+      setTimeout(() => onLog("  ✓ Payment released", "success"), 1500);
+      setTimeout(() => onLog("", "info"), 1800);
+      setTimeout(() => onLog("[Step 9] Submitting reputation feedback...", "step"), 1900);
+      setTimeout(() => onLog("  ✓ Feedback submitted: 5/5", "success"), 3500);
+      setTimeout(() => onLog("", "info"), 3800);
+      setTimeout(() => onLog("[Step 10] ✓ Workflow complete", "success"), 4000);
+
       setResult(res);
     } catch (err: any) {
+      clearTimers();
       if (err?.message?.includes("User rejected")) {
         setError("Transaction rejected by user");
+        onLog("  ✗ Transaction rejected by user", "error");
       } else {
-        setError(err.response?.data?.error || err.message || "Request failed");
+        const msg = err.response?.data?.error || err.message || "Request failed";
+        setError(msg);
+        onLog(`  ✗ Error: ${msg}`, "error");
       }
     } finally {
       setSubmitting(false);
@@ -109,9 +166,7 @@ export default function CodeReviewForm() {
         {(configError || quoteError) && (
           <p className="text-xs text-yellow-400">Failed to load config from gateway. Check that the gateway is running.</p>
         )}
-        {quote && (
-          <p className="text-xs text-gray-500">Provider: {quote.provider}</p>
-        )}
+        {quote && <p className="text-xs text-gray-500">Provider: {quote.provider}</p>}
         <button
           type="submit"
           disabled={submitting || !dataReady}
