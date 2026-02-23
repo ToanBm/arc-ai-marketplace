@@ -162,17 +162,17 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
     const correctAmount = escrowData.amount >= config.defaultPaymentUsdc;
 
     if (!isFunded || !correctPayee || !correctAmount) {
-      console.log(`[Agent B] Payment verification failed:`, { isFunded, correctPayee, correctAmount });
+      console.log(`[Agent B] Payment verification failed:`, { isFunded, correctPayee, correctAmount, escrowPayee: escrowData.payee, agentWallet: wallet.address, amount: escrowData.amount.toString(), required: config.defaultPaymentUsdc.toString() });
       res.status(402).json({ error: "Payment not verified on-chain" });
       return;
     }
 
     console.log(`[Agent B] Payment verified on-chain: ${ethers.formatUnits(escrowData.amount, 6)} USDC`);
-    savePaymentProof(taskId, proof.txHash, proof.payer, escrowData.amount.toString());
-    markPaymentVerified(taskId);
-  } catch (err) {
-    console.error(`[Agent B] On-chain verification error:`, err);
-    res.status(500).json({ error: "Failed to verify payment on-chain" });
+    try { savePaymentProof(taskId, proof.txHash, proof.payer, escrowData.amount.toString()); } catch {}
+    try { markPaymentVerified(taskId); } catch {}
+  } catch (err: any) {
+    console.error(`[Agent B] On-chain verification error:`, err.message);
+    res.status(500).json({ error: "Failed to verify payment on-chain", detail: err.message });
     return;
   }
 
@@ -182,7 +182,7 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
     result = await fetchOracleDataWithAnalysis(pair);
   } catch (err: any) {
     console.error(`[Agent B] Failed to fetch oracle data:`, err.message);
-    res.status(500).json({ error: "Failed to fetch oracle data" });
+    res.status(500).json({ error: "Failed to fetch oracle data", detail: err.message });
     return;
   }
 
@@ -194,14 +194,16 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
     const tx = await validation.submitResult(taskId, resultHash, `data:json,${resultJson}`);
     await tx.wait();
     console.log(`[Agent B] Proof-of-work submitted to ValidationRegistry (hash: ${resultHash.slice(0, 18)}...)`);
-    saveOracleResult(taskId, pair, resultJson, resultHash);
-    saveTaskRecord(taskId, proof.payer, pair);
-    updateTaskStatus(taskId, "completed");
   } catch (err: any) {
     console.error(`[Agent B] Failed to submit proof:`, err.message);
-    res.status(500).json({ error: "Failed to submit proof on-chain" });
+    res.status(500).json({ error: "Failed to submit proof on-chain", detail: err.message });
     return;
   }
+
+  // DB saves are best-effort — don't fail the request over a storage error
+  try { saveOracleResult(taskId, pair, resultJson, resultHash); } catch (e: any) { console.warn(`[Agent B] saveOracleResult:`, e.message); }
+  try { saveTaskRecord(taskId, proof.payer, pair); } catch (e: any) { console.warn(`[Agent B] saveTaskRecord:`, e.message); }
+  try { updateTaskStatus(taskId, "completed"); } catch (e: any) { console.warn(`[Agent B] updateTaskStatus:`, e.message); }
 
   // Return the result to Agent A
   res.json({

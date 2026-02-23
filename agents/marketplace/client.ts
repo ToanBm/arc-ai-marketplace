@@ -142,8 +142,10 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3)
     try {
       return await fn();
     } catch (err: any) {
-      if (i === maxRetries - 1) throw err;
-      console.log(`  ⚠ ${label} failed (attempt ${i + 1}/${maxRetries}): ${err.message}`);
+      // Extract the real error message from HTTP response body if available
+      const detail = err.response?.data?.detail || err.response?.data?.error || err.message;
+      if (i === maxRetries - 1) throw new Error(detail);
+      console.log(`  ⚠ ${label} failed (attempt ${i + 1}/${maxRetries}): ${detail}`);
       await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
     }
   }

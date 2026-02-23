@@ -49,7 +49,7 @@ export function usePricing() {
 }
 
 export function useQuote(service: string) {
-  return useSWR(`quote-${service}`, () => fetchQuote(service), {
+  return useSWR(service ? `quote-${service}` : null, () => fetchQuote(service), {
     refreshInterval: 30_000,
     revalidateOnMount: true,
     errorRetryCount: 5,

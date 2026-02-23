@@ -154,8 +154,11 @@ export default function SummarizationForm({ onLog, onStart }: FormProps) {
           />
           {errors.text && <p className="text-xs text-red-400 mt-1">{errors.text.message}</p>}
         </div>
-        {(configError || quoteError) && (
-          <p className="text-xs text-yellow-400">Failed to load config from gateway. Check that the gateway is running.</p>
+        {configError && (
+          <p className="text-xs text-yellow-400">Gateway unreachable — check that it is running and {process.env.NEXT_PUBLIC_API_URL} is correct.</p>
+        )}
+        {!configError && quoteError && (
+          <p className="text-xs text-yellow-400">No summarization providers online. Start agent servers (E / H).</p>
         )}
         {quote && <p className="text-xs text-gray-500">Provider: {quote.provider}</p>}
         <button
