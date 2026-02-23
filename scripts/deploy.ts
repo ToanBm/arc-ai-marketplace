@@ -14,7 +14,8 @@ async function main() {
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   // Use Arc's native USDC — no deployment needed
-  const usdcAddr = process.env.USDC_ADDRESS || "0x3600000000000000000000000000000000000000";
+  const usdcAddr = process.env.USDC_ADDRESS;
+  if (!usdcAddr) throw new Error("USDC_ADDRESS is not set in .env");
   console.log("Using USDC at:", usdcAddr);
   await delay(2000);
 

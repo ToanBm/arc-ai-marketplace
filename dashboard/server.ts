@@ -5,10 +5,9 @@ import * as fs from "fs";
 import axios from "axios";
 import { ethers } from "ethers";
 import { config } from "../agents/shared/config";
-import { IDENTITY_REGISTRY_ABI, REPUTATION_REGISTRY_ABI } from "../agents/shared/abis";
-import { runWorkflow, WorkflowResult } from "../agents/agentA/client";
+import { IDENTITY_REGISTRY_ABI, REPUTATION_REGISTRY_ABI, USDC_ABI } from "../agents/shared/abis";
 import { SUPPORTED_PAIRS, normalizePair, isSupportedPair } from "../agents/shared/chainlink";
-import { runServiceRequest, SERVICE_REGISTRY } from "../agents/marketplace/client";
+import { runServiceRequest, SERVICE_REGISTRY, MarketplaceResult } from "../agents/marketplace/client";
 import { getRecentTasks, getServiceResult, getStats } from "../agents/shared/storage";
 
 const PORT = config.gatewayPort;
@@ -49,10 +48,10 @@ let workflowRunning = false;
 const serviceRunning: Record<string, boolean> = {};
 
 // ── Result cache (60s TTL) ──────────────────────────────────────────────────
-const resultCache: Map<string, { result: WorkflowResult; timestamp: number }> = new Map();
+const resultCache: Map<string, { result: MarketplaceResult; timestamp: number }> = new Map();
 const CACHE_TTL = 60_000;
 
-function getCachedResult(pair: string): WorkflowResult | null {
+function getCachedResult(pair: string): MarketplaceResult | null {
   const entry = resultCache.get(pair);
   if (entry && Date.now() - entry.timestamp < CACHE_TTL) return entry.result;
   if (entry) resultCache.delete(pair);
@@ -97,6 +96,11 @@ const ERC20_TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 const quoteCache: Map<string, { amount: bigint; provider: string; price: string; ts: number }> = new Map();
 const QUOTE_TTL = 30_000;
 
+// 10% platform markup applied to all user-facing prices.
+// User pays: agentPrice * 1.10 → operator wallet (treasury = marketplace wallet).
+// Operator pays agent: agentPrice. Net retained: agentPrice * 0.10 per request.
+const MARKUP_BPS = 110n; // 110 / 100 = 1.10x
+
 async function getProviderQuote(serviceType: string): Promise<{ amount: bigint; provider: string; price: string } | null> {
   const cached = quoteCache.get(serviceType);
   if (cached && Date.now() - cached.ts < QUOTE_TTL) {
@@ -124,7 +128,8 @@ async function getProviderQuote(serviceType: string): Promise<{ amount: bigint; 
 
     const top = ranked[0];
     const capRes = await axios.get(`${top.endpoint}/capabilities`, { timeout: 3000 });
-    const amount = BigInt(capRes.data.pricing[svcConfig.pricingKey]);
+    const agentAmount = BigInt(capRes.data.pricing[svcConfig.pricingKey]);
+    const amount = agentAmount * MARKUP_BPS / 100n; // marked-up amount user must pay
     const price = ethers.formatUnits(amount, 6);
 
     quoteCache.set(serviceType, { amount, provider: top.name, price, ts: Date.now() });
@@ -136,7 +141,10 @@ async function getProviderQuote(serviceType: string): Promise<{ amount: bigint; 
 
 /**
  * Verify a user's USDC payment tx on-chain.
- * Returns true if the tx is a valid Transfer to treasury for >= the live provider price.
+ *
+ * Primary:  scan ERC20 Transfer logs (standard EVM tokens).
+ * Fallback: balance-change check at the transaction block — handles Arc's native
+ *           USDC precompile which does not emit standard Transfer events.
  */
 async function verifyPaymentTx(
   txHash: string,
@@ -152,12 +160,12 @@ async function verifyPaymentTx(
   if (!usdcAddress) return { valid: false, error: "USDC contract address not configured" };
 
   try {
-    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
-    const receipt = await provider.getTransactionReceipt(txHash);
+    const rpcProvider = new ethers.JsonRpcProvider(config.rpcUrl);
+    const receipt = await rpcProvider.getTransactionReceipt(txHash);
     if (!receipt) return { valid: false, error: "Transaction not found or not yet mined" };
     if (receipt.status !== 1) return { valid: false, error: "Transaction reverted" };
 
-    // Look for a Transfer log from the USDC contract to the treasury
+    // ── Primary: standard ERC20 Transfer log scan ──────────────────────────
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== usdcAddress) continue;
       if (log.topics[0] !== ERC20_TRANSFER_TOPIC) continue;
@@ -170,7 +178,23 @@ async function verifyPaymentTx(
       if (value >= requiredAmount) return { valid: true };
     }
 
-    return { valid: false, error: "No matching USDC transfer to treasury found in transaction" };
+    // ── Fallback: balance-change verification ──────────────────────────────
+    // Arc's native USDC precompile does not emit standard EVM Transfer logs.
+    // Instead, compare the treasury's USDC balance immediately before and
+    // after the transaction's block.
+    const usdc = new ethers.Contract(config.contracts.usdc, USDC_ABI, rpcProvider);
+    const blockNumber = receipt.blockNumber;
+
+    const [balBefore, balAfter] = await Promise.all([
+      usdc.balanceOf(treasury, { blockTag: blockNumber - 1 }),
+      usdc.balanceOf(treasury, { blockTag: blockNumber }),
+    ]);
+
+    if ((balAfter as bigint) - (balBefore as bigint) >= requiredAmount) {
+      return { valid: true };
+    }
+
+    return { valid: false, error: "USDC payment to treasury not found or insufficient" };
   } catch (err: any) {
     return { valid: false, error: `Payment verification failed: ${err.message}` };
   }
@@ -345,7 +369,7 @@ app.post("/api/check", checkLimiter, async (req, res) => {
   // 5. Run workflow
   workflowRunning = true;
   try {
-    const result = await runWorkflow(pair);
+    const result = await runServiceRequest("oracle", { pair });
     resultCache.set(pair, { result, timestamp: Date.now() });
     return res.json({ result, cached: false });
   } catch (err: any) {
@@ -381,7 +405,7 @@ app.get("/api/providers", async (_req, res) => {
     const agents: any[] = [];
 
     for (let i = 0; i < count; i++) {
-      const addr = await identity.agentAddresses(i);
+      const addr = await identity.agentList(i);
       const info = await identity.getAgent(addr);
       if (!info.active) continue;
 
@@ -449,12 +473,19 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
     return res.status(400).json({ error: "Missing required field: targetLanguage (string)" });
   }
 
-  // Verify on-chain payment if tx hash provided
-  if (paymentTxHash) {
-    const verification = await verifyPaymentTx(paymentTxHash, "translation");
-    if (!verification.valid) {
-      return res.status(402).json({ error: verification.error });
-    }
+  // Payment required — user must send marked-up amount to treasury before service executes
+  if (!paymentTxHash) {
+    const quote = await getProviderQuote("translation");
+    return res.status(402).json({
+      error: "Payment required",
+      treasury: config.treasuryAddress,
+      amount: quote?.amount.toString(),
+      price: quote?.price,
+    });
+  }
+  const verification = await verifyPaymentTx(paymentTxHash, "translation");
+  if (!verification.valid) {
+    return res.status(402).json({ error: verification.error });
   }
 
   if (serviceRunning["translation"]) {
@@ -488,12 +519,19 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
     return res.status(400).json({ error: "Missing required field: text (string)" });
   }
 
-  // Verify on-chain payment if tx hash provided
-  if (paymentTxHash) {
-    const verification = await verifyPaymentTx(paymentTxHash, "summarization");
-    if (!verification.valid) {
-      return res.status(402).json({ error: verification.error });
-    }
+  // Payment required
+  if (!paymentTxHash) {
+    const quote = await getProviderQuote("summarization");
+    return res.status(402).json({
+      error: "Payment required",
+      treasury: config.treasuryAddress,
+      amount: quote?.amount.toString(),
+      price: quote?.price,
+    });
+  }
+  const verification = await verifyPaymentTx(paymentTxHash, "summarization");
+  if (!verification.valid) {
+    return res.status(402).json({ error: verification.error });
   }
 
   if (serviceRunning["summarization"]) {
@@ -527,12 +565,19 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
     return res.status(400).json({ error: "Missing required field: code (string)" });
   }
 
-  // Verify on-chain payment if tx hash provided
-  if (paymentTxHash) {
-    const verification = await verifyPaymentTx(paymentTxHash, "code-review");
-    if (!verification.valid) {
-      return res.status(402).json({ error: verification.error });
-    }
+  // Payment required
+  if (!paymentTxHash) {
+    const quote = await getProviderQuote("code-review");
+    return res.status(402).json({
+      error: "Payment required",
+      treasury: config.treasuryAddress,
+      amount: quote?.amount.toString(),
+      price: quote?.price,
+    });
+  }
+  const verification = await verifyPaymentTx(paymentTxHash, "code-review");
+  if (!verification.valid) {
+    return res.status(402).json({ error: verification.error });
   }
 
   if (serviceRunning["code-review"]) {

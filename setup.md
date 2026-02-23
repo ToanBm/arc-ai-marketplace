@@ -81,7 +81,7 @@
 
 | File | Role | Port | Pricing | Lines |
 |------|------|------|---------|-------|
-| `agents/agentA/client.ts` | Client Trading Bot (consumer) | N/A (CLI) | Pays others | 296 |
+| `agents/marketplace/client.ts` | Marketplace Client (consumer, embedded in gateway) | N/A | Pays others | — |
 | `agents/agentB/server.ts` | Oracle Provider #1 (Express) | 3402 | 5 USDC/task | 269 |
 | `agents/agentC/server.ts` | Oracle Provider #2 (Express) | 3403 | 3 USDC/task | 296 |
 | `agents/agentD/server.ts` | Translation Service (Express) | 3404 | 2 USDC/task | — |
@@ -89,12 +89,13 @@
 | `agents/agentF/server.ts` | Code Review Service (Express) | 3406 | 3 USDC/task | — |
 | `agents/marketplace/client.ts` | Marketplace orchestrator | N/A | — | — |
 
-#### Agent A — Client Trading Bot
-- 9-step autonomous workflow: discover -> check reputation -> create task -> escrow deposit -> x402 request (402 -> pay -> retry) -> verify hash -> release payment -> rate provider
-- Ranks multiple providers by reputation score (highest first), then by task count
-- Supports any trading pair (ETH/USD, BTC/USD, etc.)
-- Exports: `runWorkflow(pair): Promise<WorkflowResult>`
-- Capabilities: `["trading", "client"]`
+#### Marketplace Client — Universal Service Consumer
+- 10-step autonomous workflow: register -> discover -> rank -> verify -> task -> escrow -> x402 (402 -> pay -> retry) -> verify hash -> release payment -> rate provider
+- Handles all service types: oracle, translation, summarization, code review
+- Ranks providers by reputation score (highest first), then by task count
+- Embedded in the API Gateway (`dashboard/server.ts`); also runnable via CLI
+- Exports: `runServiceRequest(serviceType, input): Promise<MarketplaceResult>`
+- Capabilities: `["client", "marketplace"]`
 
 #### Agent B — Oracle Provider #1
 - Express.js server with x402 micropayment flow
@@ -113,7 +114,7 @@
 - Multi-source data aggregation
 - Supported pairs: ETH/USD, BTC/USD, SOL/USD (more than Agent B)
 - Capabilities: `["oracle", "analysis", "multi-source"]`
-- Demonstrates marketplace competition: Agent A can discover both B and C, compare reputation + price, and choose the best provider
+- Demonstrates marketplace competition: the Marketplace Client discovers both B and C, compares reputation + price, and chooses the best provider
 
 #### Agent D — Translation Service
 - Express.js server providing text translation
@@ -223,11 +224,11 @@
 ### 1.5 Tests
 - `test/full-flow.test.ts` — 9+ test cases covering IdentityRegistry, ValidationRegistry, PaymentEscrow, reputation, negotiation
 - Framework: Mocha + Chai via Hardhat Toolbox
-- Fixture with 5 signers (deployer, agentA, agentB, agentC, arbitrator)
+- Fixture with 5 signers (deployer, marketplace, agentB, agentC, arbitrator)
 
 ### 1.6 Scripts
 - `scripts/deploy.ts` — Deploys all 7 contracts with 5s delays (ThirdWeb rate-limit fix) + mints 1000 USDC to all signers
-- `scripts/run-demo.ts` — Full E2E orchestrator: deploys contracts, starts Agent B + C, runs negotiation demo (RFQ -> bids -> award), runs Agent A workflow, demonstrates escrow timeout
+- `scripts/run-demo.ts` — Full E2E orchestrator: deploys contracts, starts Agent B + C, runs negotiation demo (RFQ -> bids -> award), runs Marketplace Client service requests, demonstrates escrow timeout
 
 ### 1.7 Known Issues Fixed
 - ThirdWeb RPC rate-limits at ~3 req/sec — deploy.ts now has 5s delays between contracts
@@ -250,7 +251,7 @@
 | Competitive agents | Agent B (5 USDC) vs Agent C (3 USDC) both work | UI to compare agents side-by-side |
 | Dispute resolution | ArbitrationRegistry fully built (file, evidence, resolve) | Dispute UI for payers, payees, and arbitrators |
 | Agent profiles | On-chain data exists but no profile pages | Profile pages with reputation history, task history |
-| Task management | History page shows recent tasks; Agent A runs full workflow via CLI | Consumer/provider dashboards for managing tasks |
+| Task management | History page shows recent tasks; Marketplace Client runs full workflow via gateway | Consumer/provider dashboards for managing tasks |
 | Payment management | Escrow works (deposit, release, refund, timeout); user payments via treasury | UI for escrow status, earnings |
 | Agent SDK | Agent B/C/D/E/F code works but not packaged | npm package + CLI for third-party agent deployment |
 | Subgraph indexing | Schema + config scaffolded, handlers empty | Implement AssemblyScript event handlers |
@@ -341,7 +342,7 @@ contract PaymentEscrow is ReentrancyGuard {
 After contract changes:
 - Update `agents/shared/abis.ts` with new function signatures
 - Update `agents/agentB/server.ts` and `agents/agentC/server.ts` registration calls to include new fields
-- Update `agents/agentA/client.ts` to use new `findByCapabilityWithPrice()` for better discovery
+- Update `agents/marketplace/client.ts` to use new `findByCapabilityWithPrice()` for better discovery
 - Update `dashboard/index.html` ABIs
 - Recompile: `npm run compile`
 - Run tests: `npm run test`
@@ -657,7 +658,7 @@ cd my-oracle-bot
 npm start
 # -> Registered on-chain as "my-oracle-bot"
 # -> Serving on port 3500
-# -> Discoverable by any Agent A in the marketplace
+# -> Discoverable by any Marketplace Client in the network
 ```
 
 ---
@@ -755,8 +756,8 @@ query OracleProviders($minScore: BigInt) {
 
 - [ ] Enforce HTTPS for agent endpoints (reject http:// in registration)
 - [ ] Implement EIP-712 typed data signatures for agent-to-agent authentication
-  - Agent A signs request with its wallet key
-  - Agent B verifies signature matches the registered on-chain address
+  - Marketplace Client signs request with its wallet key
+  - Provider agent verifies signature matches the registered on-chain address
 - [ ] Enable `apiKeyAuth` middleware in production (`AGENT_API_KEYS` env var)
 - [ ] Upgrade rate limiting: token bucket or sliding window algorithm
 
@@ -936,13 +937,13 @@ npm run frontend:dev   # port 3000
 
 Then open http://localhost:3000, connect MetaMask (import Hardhat account), and use marketplace services with USDC payments.
 
-### Run Oracle Demo (Agent A ↔ Agent B)
+### Run Oracle Demo (Marketplace Client ↔ Agent B/C)
 ```bash
 npm run node           # Terminal 1
 npm run deploy:local   # Terminal 2
 npm run agent:b        # Terminal 3: Oracle Provider #1 (port 3402)
 npm run agent:c        # Terminal 4: Oracle Provider #2 (port 3403)
-npm run agent:a        # Terminal 5: Client Trading Bot
+npm run gateway        # Terminal 5: API Gateway + Marketplace Client (port 3400)
 ```
 
 ### Deploy to Arc Testnet
@@ -974,7 +975,7 @@ PRIVATE_KEY_AGENT_C=0x...    # Hardhat #2
 PRIVATE_KEY_AGENT_D=0x...    # Hardhat #3 (Translation)
 PRIVATE_KEY_AGENT_E=0x...    # Hardhat #4 (Summarization)
 PRIVATE_KEY_AGENT_F=0x...    # Hardhat #5 (Code Review)
-PRIVATE_KEY_MARKETPLACE=0x...# Hardhat #6
+PRIVATE_KEY_TREASURY=0x...# Hardhat #6
 TREASURY_ADDRESS=0x...       # Hardhat #7 (receives user payments)
 
 # Network
@@ -1017,7 +1018,6 @@ npm run node             # Start Hardhat local node
 npm run gateway          # Start API Gateway (port 3400)
 npm run frontend:dev     # Start Next.js frontend (port 3000)
 npm run frontend:install # Install frontend dependencies
-npm run agent:a          # Agent A — Client Trading Bot
 npm run agent:b          # Agent B — Oracle Provider #1 (port 3402)
 npm run agent:c          # Agent C — Oracle Provider #2 (port 3403)
 npm run agent:d          # Agent D — Translation Service (port 3404)

@@ -12,6 +12,7 @@ export const IDENTITY_REGISTRY_ABI = [
   "function findByCapability(string _capability) external view returns (tuple(address wallet, string name, string did, string endpoint, string[] capabilities, uint256 registeredAt, bool active)[])",
   "function findByCapability(string _capability, uint256 _offset, uint256 _limit) external view returns (tuple(address wallet, string name, string did, string endpoint, string[] capabilities, uint256 registeredAt, bool active)[])",
   "function agentCount() external view returns (uint256)",
+  "function agentList(uint256) external view returns (address)",
   "event AgentRegistered(address indexed wallet, string did, string name)",
   "event AgentCapabilitiesUpdated(address indexed wallet)",
 ];

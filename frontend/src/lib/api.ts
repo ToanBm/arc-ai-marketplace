@@ -60,6 +60,18 @@ export async function submitCodeReview(input: {
   return data;
 }
 
+// Oracle check — triggers Agent A → B/C workflow (no user payment required)
+export async function submitOracleCheck(pair: string) {
+  const { data } = await api.post("/api/check", { pair });
+  return data;
+}
+
+// Supported oracle pairs
+export async function fetchSupportedPairs() {
+  const { data } = await api.get("/api/supported-pairs");
+  return data.pairs as string[];
+}
+
 // Pricing
 export async function fetchPricing() {
   const { data } = await api.get("/api/pricing");

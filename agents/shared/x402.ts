@@ -36,7 +36,7 @@ export interface X402PaymentProof {
 }
 
 /**
- * Build the 402 response payload that Agent B sends to Agent A.
+ * Build the 402 response payload that a provider agent sends to the Marketplace Client.
  */
 export function buildPaymentRequest(params: {
   taskId: string;
@@ -57,7 +57,7 @@ export function buildPaymentRequest(params: {
 }
 
 /**
- * Build a signed payment proof that Agent A sends after paying on-chain.
+ * Build a signed payment proof that the Marketplace Client sends after paying on-chain.
  * The payer signs keccak256(taskId, txHash) to prove ownership of the payer address.
  */
 export async function buildPaymentProof(params: {

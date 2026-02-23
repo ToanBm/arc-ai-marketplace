@@ -6,10 +6,10 @@
  *
  * Orchestrates the complete AI Agent Economy workflow:
  * 1. Deploys all contracts (including ArbitrationRegistry + NegotiationManager)
- * 2. Mints test USDC to Agent A
+ * 2. Mints test USDC to Marketplace Client
  * 3. Starts Agent B + Agent C (Oracle Provider) servers
  * 4. Runs negotiation flow (RFQ → Bids → Award)
- * 5. Runs Agent A (Client Trading Bot) workflow with best provider
+ * 5. Marketplace Client runs service requests (Oracle, Translation, Summarization, Code Review)
  * 6. Demonstrates escrow timeout functionality
  * 7. Prints final state of all registries
  *
@@ -172,19 +172,27 @@ async function main() {
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
 
   // ── Setup Wallets ────────────────────────────────────────────────────
-  const [walletA, walletB, walletC] = await ethers.getSigners();
-  console.log(`Agent A (Trading Bot):    ${walletA.address}`);
+  const signers = await ethers.getSigners();
+  const deployer         = signers[0];
+  const walletB          = signers[1];
+  const walletC          = signers[2];
+  const walletD          = signers[3];
+  const walletE          = signers[4];
+  const walletF          = signers[5];
+  const walletMarketplace = signers[6];
+  console.log(`Deployer:                  ${deployer.address}`);
   console.log(`Agent B (Oracle Provider): ${walletB.address}`);
-  console.log(`Agent C (Oracle Provider): ${walletC.address}\n`);
+  console.log(`Agent C (Oracle Provider): ${walletC.address}`);
+  console.log(`Marketplace Client:        ${walletMarketplace.address}\n`);
 
   // ── Deploy Contracts ─────────────────────────────────────────────────
-  const contracts = await deployContracts(walletA);
+  const contracts = await deployContracts(deployer);
   const { usdc, identity, reputation, validation, escrow, negotiation } = contracts;
 
-  // ── Mint Test USDC to Agent A ────────────────────────────────────────
-  await (await usdc.mint(walletA.address, 1_000_000_000n)).wait(); // 1000 USDC
-  console.log(`\n[Setup] Minted 1000 USDC to Agent A`);
-  console.log(`[Setup] Agent A USDC balance: ${ethers.formatUnits(await usdc.balanceOf(walletA.address), 6)}`);
+  // ── Mint Test USDC to Marketplace Client ────────────────────────────
+  await (await usdc.mint(walletMarketplace.address, 1_000_000_000n)).wait(); // 1000 USDC
+  console.log(`\n[Setup] Minted 1000 USDC to Marketplace Client`);
+  console.log(`[Setup] Marketplace Client USDC balance: ${ethers.formatUnits(await usdc.balanceOf(walletMarketplace.address), 6)}`);
 
   // ── Start Agent B + C Servers ────────────────────────────────────────
   const PORT_B = 3402;
@@ -201,13 +209,8 @@ async function main() {
   });
   console.log(`[Setup] Agent B server on port ${PORT_B}, Agent C on port ${PORT_C}\n`);
 
-  // ── Register All Three Agents ────────────────────────────────────────
-  console.log("[Register] Registering agents in IdentityRegistry...");
-  await (await identity.connect(walletA).registerAgent(
-    "TradingBot-A", "http://localhost:3401", ["trading", "client"]
-  )).wait();
-  console.log("  Agent A registered as TradingBot-A");
-
+  // ── Register Oracle Provider Agents ─────────────────────────────────
+  console.log("[Register] Registering oracle agents in IdentityRegistry...");
   await (await identity.connect(walletB).registerAgent(
     "OracleBot-B", `http://localhost:${PORT_B}`, ["oracle", "analysis", "chainlink"]
   )).wait();
@@ -228,8 +231,8 @@ async function main() {
 
   const rfqId = ethers.id(`rfq-oracle-${Date.now()}`);
 
-  console.log("\n[1/3] Agent A creates RFQ for oracle service...");
-  await (await negotiation.connect(walletA).createRfq(
+  console.log("\n[1/3] Marketplace Client creates RFQ for oracle service...");
+  await (await negotiation.connect(walletMarketplace).createRfq(
     rfqId, "oracle", "ETH/USD price + trend analysis", 10_000_000n, 3600
   )).wait();
   console.log("  RFQ created (max budget: 10 USDC, 1 hour bidding)");
@@ -259,131 +262,22 @@ async function main() {
   }
   console.log(`  └─────────────┴────────┴──────────────┘`);
 
-  console.log("\n[3/3] Agent A awards best bid...");
+  console.log("\n[3/3] Marketplace Client awards best bid...");
   // Pick the cheapest bid (Agent C)
-  await (await negotiation.connect(walletA).awardBid(rfqId, bidIdC)).wait();
+  await (await negotiation.connect(walletMarketplace).awardBid(rfqId, bidIdC)).wait();
   console.log("  Awarded to Agent C (3.00 USDC — best price)");
 
   // ══════════════════════════════════════════════════════════════════════
-  //  PHASE 2: EXECUTION — x402 Workflow with winning provider
+  //  PHASE 2: AI SERVICE MARKETPLACE (Oracle + Translation + Summarization + Code Review)
   // ══════════════════════════════════════════════════════════════════════
 
   console.log("\n" + "─".repeat(60));
-  console.log("  PHASE 2: EXECUTION (x402 Workflow)");
+  console.log("  PHASE 2: AI SERVICE MARKETPLACE");
   console.log("─".repeat(60));
-
-  const pair = "ETH/USD";
-  const taskIdRaw = `oracle-${pair}-${Date.now()}`;
-  const taskId = ethers.id(taskIdRaw);
-  const winningProvider = walletC;
-  const winningEndpoint = `http://localhost:${PORT_C}`;
-  const paymentAmount = 3_000_000n; // Agent C's price
-
-  // Step 1: Discovery (already done via negotiation)
-  console.log(`\n[1/7] DISCOVERY — Winner from negotiation: OracleBot-C`);
-
-  // Step 2: Check reputation
-  console.log("\n[2/7] REPUTATION CHECK...");
-  const rep = await reputation.getReputation(winningProvider.address);
-  console.log(`  Tasks: ${rep.taskCount}, Score: ${rep.taskCount > 0n ? (Number(rep.totalScore) * 100 / Number(rep.taskCount) / 100).toFixed(2) : "N/A (new agent)"}`);
-
-  // Step 3: Create task on-chain
-  console.log("\n[3/7] TASK CREATION...");
-  await (await validation.connect(walletA).createTask(
-    taskId, winningProvider.address, `Fetch ${pair} + trend analysis`
-  )).wait();
-  console.log(`  Task created: ${taskId.slice(0, 18)}...`);
-
-  // Step 4: Deposit escrow with timeout
-  console.log("\n[4/7] ESCROW DEPOSIT (with 1-hour timeout)...");
-  await (await usdc.connect(walletA).approve(await escrow.getAddress(), paymentAmount)).wait();
-  const depositTx = await escrow.connect(walletA).deposit(taskId, winningProvider.address, paymentAmount);
-  await depositTx.wait();
-
-  const escrowData = await escrow.getEscrow(taskId);
-  const timeLeft = await escrow.timeRemaining(taskId);
-  console.log(`  ${ethers.formatUnits(paymentAmount, 6)} USDC deposited`);
-  console.log(`  Deadline: ${new Date(Number(escrowData.deadline) * 1000).toISOString()}`);
-  console.log(`  Time remaining: ${timeLeft}s`);
-
-  // Step 5: x402 — Request oracle data
-  console.log("\n[5/7] x402 FLOW...");
-  const axios = (await import("axios")).default;
-
-  let paymentInfo!: X402PaymentRequest;
-  try {
-    await axios.post(`${winningEndpoint}/oracle/request`, { pair, taskId });
-    throw new Error("Expected 402");
-  } catch (err: any) {
-    if (err.response?.status === 402) {
-      paymentInfo = err.response.data.payment;
-      console.log(`  <- 402 Payment Required (${ethers.formatUnits(paymentInfo.amount, 6)} USDC)`);
-    } else {
-      throw err;
-    }
-  }
-
-  const proof = buildPaymentProof({ taskId, txHash: depositTx.hash, payer: walletA.address });
-  const response = await axios.post(
-    `${winningEndpoint}/oracle/request`,
-    { pair, taskId },
-    { headers: { "X-402-Payment-Proof": JSON.stringify(proof) } }
-  );
-
-  const oracleResult = response.data.result;
-  const resultHash = response.data.resultHash;
-  console.log(`  Data received: ${pair} = $${oracleResult.oracleData.price}`);
-  console.log(`  Trend: ${oracleResult.trend} (${(oracleResult.confidence * 100).toFixed(0)}% confidence)`);
-
-  // Step 6: Verify and release
-  console.log("\n[6/7] VERIFICATION & PAYMENT...");
-  const hashMatch = await validation.verifyHash(taskId, resultHash);
-  console.log(`  Hash verification: ${hashMatch ? "PASSED" : "FAILED"}`);
-
-  if (!hashMatch) {
-    await (await validation.connect(walletA).disputeResult(taskId)).wait();
-    await (await escrow.connect(walletA).refund(taskId)).wait();
-    console.log("  DISPUTE — Payment refunded");
-    serverB.close(); serverC.close();
-    return;
-  }
-
-  await (await validation.connect(walletA).verifyResult(taskId)).wait();
-  console.log("  Result verified on-chain");
-
-  await (await escrow.connect(walletA).release(taskId)).wait();
-  console.log(`  ${ethers.formatUnits(paymentAmount, 6)} USDC released to OracleBot-C`);
-
-  // Step 7: Mutual reputation feedback
-  console.log("\n[7/7] REPUTATION UPDATE...");
-  await (await reputation.connect(walletA).submitFeedback(
-    winningProvider.address, taskId, 5, "Excellent oracle data, competitive pricing"
-  )).wait();
-  console.log("  Agent A -> Agent C: 5/5");
-
-  try {
-    await axios.post(`${winningEndpoint}/feedback`, {
-      taskId, clientAddress: walletA.address, score: 5, comment: "Prompt payment",
-    });
-    console.log("  Agent C -> Agent A: 5/5");
-  } catch (err: any) {
-    console.log(`  Agent C feedback failed: ${err.message}`);
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  PHASE 3: AI SERVICE MARKETPLACE
-  // ══════════════════════════════════════════════════════════════════════
-
-  console.log("\n" + "─".repeat(60));
-  console.log("  PHASE 3: AI SERVICE MARKETPLACE");
-  console.log("─".repeat(60));
+  console.log("  Oracle is now part of the Marketplace Client (no Agent A needed)");
 
   // Get additional signers for marketplace agents
-  const signers = await ethers.getSigners();
-  const walletD = signers[3]; // Translation
-  const walletE = signers[4]; // Summarization
-  const walletF = signers[5]; // Code Review
-  const walletMarketplace = signers[6]; // Marketplace client
+  const axios = (await import("axios")).default;
 
   console.log(`\n  Agent D (Translation):    ${walletD.address}`);
   console.log(`  Agent E (Summarization):  ${walletE.address}`);
@@ -587,8 +481,18 @@ async function main() {
 
   const serviceRequests = [
     {
+      name: "Oracle Price",
+      capability: "oracle",
+      endpointPath: "/oracle/request",
+      provider: walletB,
+      endpoint: `http://localhost:${PORT_B}`,
+      payment: 5_000_000n,
+      body: { pair: "ETH/USD" },
+    },
+    {
       name: "Translation",
       capability: "translation",
+      endpointPath: "/service/request",
       provider: walletD,
       endpoint: `http://localhost:${PORT_D}`,
       payment: 2_000_000n,
@@ -597,6 +501,7 @@ async function main() {
     {
       name: "Summarization",
       capability: "summarization",
+      endpointPath: "/service/request",
       provider: walletE,
       endpoint: `http://localhost:${PORT_E}`,
       payment: 1_500_000n,
@@ -605,6 +510,7 @@ async function main() {
     {
       name: "Code Review",
       capability: "code-review",
+      endpointPath: "/service/request",
       provider: walletF,
       endpoint: `http://localhost:${PORT_F}`,
       payment: 3_000_000n,
@@ -612,11 +518,13 @@ async function main() {
     },
   ];
 
+  let lastSvcTaskId = "";
   for (const svc of serviceRequests) {
     console.log(`\n  ── ${svc.name} Service Request ──`);
 
     const svcTaskIdRaw = `${svc.capability}-${Date.now()}`;
     const svcTaskId = ethers.id(svcTaskIdRaw);
+    lastSvcTaskId = svcTaskId;
 
     // Create task
     await (await validation.connect(walletMarketplace).createTask(
@@ -632,7 +540,7 @@ async function main() {
     // x402 Phase 1: get 402
     let svcPaymentInfo!: X402PaymentRequest;
     try {
-      await axios.post(`${svc.endpoint}/service/request`, { ...svc.body, taskId: svcTaskId });
+      await axios.post(`${svc.endpoint}${svc.endpointPath}`, { ...svc.body, taskId: svcTaskId });
     } catch (err: any) {
       if (err.response?.status === 402) {
         svcPaymentInfo = err.response.data.payment;
@@ -644,9 +552,9 @@ async function main() {
     }
 
     // x402 Phase 2: send with proof
-    const svcProof = buildPaymentProof({ taskId: svcTaskId, txHash: svcDepositTx.hash, payer: walletMarketplace.address });
+    const svcProof = await buildPaymentProof({ taskId: svcTaskId, txHash: svcDepositTx.hash, payer: walletMarketplace.address, wallet: walletMarketplace as any });
     const svcResponse = await axios.post(
-      `${svc.endpoint}/service/request`,
+      `${svc.endpoint}${svc.endpointPath}`,
       { ...svc.body, taskId: svcTaskId },
       { headers: { "X-402-Payment-Proof": JSON.stringify(svcProof) } }
     );
@@ -675,7 +583,9 @@ async function main() {
     }
 
     // Display result summary
-    if (svc.capability === "translation") {
+    if (svc.capability === "oracle") {
+      console.log(`  Result: ${svcResult.oracleData?.pair} = $${svcResult.oracleData?.price} (${svcResult.trend}, ${((svcResult.confidence ?? 0) * 100).toFixed(0)}% confidence)`);
+    } else if (svc.capability === "translation") {
       console.log(`  Result: "${svcResult.translatedText}" (${svcResult.coverage}% coverage)`);
     } else if (svc.capability === "summarization") {
       console.log(`  Result: "${svcResult.summary.slice(0, 80)}..." (${(svcResult.compressionRatio * 100).toFixed(0)}% compression)`);
@@ -690,7 +600,7 @@ async function main() {
   console.log("=".repeat(60));
 
   const allWallets: [string, HardhatEthersSigner][] = [
-    ["Agent A", walletA], ["Agent B", walletB], ["Agent C", walletC],
+    ["Agent B", walletB], ["Agent C", walletC],
     ["Agent D", walletD], ["Agent E", walletE], ["Agent F", walletF],
     ["Marketplace", walletMarketplace],
   ];
@@ -708,7 +618,7 @@ async function main() {
     console.log(`    ${name.padEnd(14)} ${r.taskCount} tasks, avg ${score}/5`);
   }
 
-  const taskData = await validation.getTask(taskId);
+  const taskData = await validation.getTask(lastSvcTaskId);
   const statusNames = ["Pending", "Submitted", "Verified", "Disputed"];
   console.log(`\n  Phase 2 task status: ${statusNames[Number(taskData.status)]}`);
   console.log(`  Negotiation RFQs: ${await negotiation.rfqCount()}`);

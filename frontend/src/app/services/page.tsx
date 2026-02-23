@@ -6,9 +6,10 @@ import ServiceCard from "@/components/services/ServiceCard";
 import TranslationForm from "@/components/services/TranslationForm";
 import SummarizationForm from "@/components/services/SummarizationForm";
 import CodeReviewForm from "@/components/services/CodeReviewForm";
+import OracleForm from "@/components/services/OracleForm";
 import GatewayLogPanel, { LogLine, LogType } from "@/components/services/GatewayLogPanel";
 
-const serviceTypes = ["translation", "summarization", "code-review"];
+const serviceTypes = ["translation", "summarization", "code-review", "oracle"];
 
 export type FormProps = {
   onLog: (text: string, type?: LogType) => void;
@@ -19,6 +20,7 @@ const formMap: Record<string, React.ComponentType<FormProps>> = {
   translation: TranslationForm,
   summarization: SummarizationForm,
   "code-review": CodeReviewForm,
+  oracle: OracleForm,
 };
 
 let logCounter = 0;
@@ -49,7 +51,7 @@ function ServicesContent() {
           <p className="text-sm text-gray-500 mt-1">Submit AI agent service requests</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {serviceTypes.map((type) => (
             <ServiceCard
               key={type}

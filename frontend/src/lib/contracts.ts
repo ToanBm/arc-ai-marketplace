@@ -20,4 +20,4 @@ export const erc20Abi = [
 ] as const;
 
 /** Treasury address for user payments */
-export const TREASURY_ADDRESS = process.env.NEXT_PUBLIC_TREASURY_ADDRESS || "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955";
+export const TREASURY_ADDRESS = process.env.NEXT_PUBLIC_TREASURY_ADDRESS ?? "";

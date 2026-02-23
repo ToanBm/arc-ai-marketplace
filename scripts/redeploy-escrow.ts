@@ -14,7 +14,8 @@ async function main() {
 
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  const usdcAddr = process.env.USDC_ADDRESS || "0x3600000000000000000000000000000000000000";
+  const usdcAddr = process.env.USDC_ADDRESS;
+  if (!usdcAddr) throw new Error("USDC_ADDRESS is not set in .env");
   console.log("Using USDC:", usdcAddr);
 
   // 1. PaymentEscrow (with Arc USDC)

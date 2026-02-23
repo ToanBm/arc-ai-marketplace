@@ -89,7 +89,7 @@ The frontend's **Gateway Log Panel** shows each step appearing in real time as t
 | Agent H | Summarization Service #2 (Analytical) | 3408 | 1.5 USDC |
 | Agent I | Code Review Service #2 (Security-focused) | 3409 | 3 USDC |
 
-Agent A (Client Trading Bot) and Marketplace Client are invoked on-demand, not long-running servers.
+The Marketplace Client is invoked on-demand (embedded in the gateway), not a long-running server.
 
 All agents:
 - Register themselves in the on-chain IdentityRegistry on startup
@@ -134,7 +134,6 @@ arc-agent/
 │   │   ├── chainlink.ts                # Oracle: Chainlink → CoinGecko → simulated fallback
 │   │   ├── middleware.ts               # Rate limiting, API key auth, request logger
 │   │   └── storage.ts                  # SQLite (oracle_results, task_records, payment_proofs, service_results)
-│   ├── agentA/client.ts                # Client Trading Bot (on-demand)
 │   ├── agentB/server.ts                # Oracle Provider #1 (port 3402)
 │   ├── agentC/server.ts                # Oracle Provider #2 (port 3403)
 │   ├── agentD/server.ts                # Translation #1 (port 3404)
@@ -196,7 +195,7 @@ Base URL (production): `https://api.toanbm.xyz/arc`
 | `POST` | `/api/services/translation` | Translation request |
 | `POST` | `/api/services/summarization` | Summarization request |
 | `POST` | `/api/services/code-review` | Code review request |
-| `POST` | `/api/check` | Oracle workflow (Agent A → B/C) |
+| `POST` | `/api/check` | Oracle workflow (Marketplace Client → B/C) |
 | `GET` | `/api/history` | Recent task history |
 | `GET` | `/api/marketplace/stats` | Aggregate marketplace stats |
 | `GET` | `/api/pricing` | Treasury address |
@@ -312,7 +311,7 @@ Service prices:
 | Variable | Description |
 |----------|-------------|
 | `PRIVATE_KEY_AGENT_A` – `PRIVATE_KEY_AGENT_I` | Wallet keys for each agent |
-| `PRIVATE_KEY_MARKETPLACE` | Marketplace client wallet |
+| `PRIVATE_KEY_TREASURY` | Marketplace client wallet |
 | `TREASURY_ADDRESS` | Receives user USDC payments |
 | `ARC_RPC_URL` | Arc Testnet RPC (e.g. `https://5042002.rpc.thirdweb.com`) |
 | `USDC_ADDRESS` | Arc USDC contract address |
@@ -345,7 +344,6 @@ npm run node             # Start Hardhat local node
 npm run gateway          # Start API Gateway (port 3400)
 npm run frontend:dev     # Start Next.js frontend (port 3000)
 npm run frontend:install # Install frontend dependencies
-npm run agent:a          # Agent A — Client Trading Bot (on-demand)
 npm run agent:b          # Agent B — Oracle Provider #1 (port 3402)
 npm run agent:c          # Agent C — Oracle Provider #2 (port 3403)
 npm run agent:d          # Agent D — Translation #1 (port 3404)

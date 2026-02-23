@@ -8,7 +8,6 @@
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "deploy:arc": "hardhat run scripts/deploy.ts --network arcTestnet",
     "redeploy:escrow": "hardhat run scripts/redeploy-escrow.ts --network arcTestnet",
-    "agent:a": "ts-node agents/agentA/client.ts",
     "agent:b": "ts-node agents/agentB/server.ts",
     "agent:c": "ts-node agents/agentC/server.ts",
     "agent:d": "ts-node agents/agentD/server.ts",

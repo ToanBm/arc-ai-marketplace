@@ -2,6 +2,7 @@
  * Marketplace Client — Universal Service Consumer
  *
  * A generalized client that can consume any service type in the marketplace:
+ * - Oracle (Agents B/C)
  * - Translation (Agent D)
  * - Summarization (Agent E)
  * - Code Review (Agent F)
@@ -10,6 +11,7 @@
  * Register → Discover → Rank → Verify → Task → Escrow → x402 → Verify Hash → Release → Feedback
  *
  * Usage:
+ *   ts-node agents/marketplace/client.ts oracle '{"pair":"ETH/USD"}'
  *   ts-node agents/marketplace/client.ts translation '{"text":"Hello world","targetLanguage":"es"}'
  *   ts-node agents/marketplace/client.ts summarization '{"text":"Long text here..."}'
  *   ts-node agents/marketplace/client.ts code-review '{"code":"console.log(x)","language":"javascript"}'
@@ -35,6 +37,7 @@ export interface ServiceConfig {
   endpointPath: string;
   buildBody: (input: any, taskId: string) => Record<string, any>;
   displayResult: (result: any) => void;
+  computeScore?: (result: any) => { score: number; comment: string };
 }
 
 export const SERVICE_REGISTRY: Record<string, ServiceConfig> = {
@@ -95,12 +98,34 @@ export const SERVICE_REGISTRY: Record<string, ServiceConfig> = {
       }
     },
   },
+
+  oracle: {
+    capabilityTag: "oracle",
+    pricingKey: "oracle-query",
+    endpointPath: "/oracle/request",
+    buildBody: (input, taskId) => ({
+      pair: input.pair,
+      taskId,
+    }),
+    displayResult: (result) => {
+      console.log(`    Pair:       ${result.oracleData?.pair}`);
+      console.log(`    Price:      $${result.oracleData?.price}`);
+      console.log(`    Trend:      ${result.trend} (${((result.confidence ?? 0) * 100).toFixed(0)}% confidence)`);
+      console.log(`    Source:     ${result.oracleData?.source}`);
+    },
+    computeScore: (result) => {
+      const staleness = Date.now() - (result.oracleData?.timestamp ?? 0);
+      if (staleness > 600_000) return { score: 3, comment: "Stale data (> 10 min old)" };
+      if (staleness > 300_000) return { score: 4, comment: "Slightly stale data (> 5 min old)" };
+      return { score: 5, comment: "Fresh and accurate oracle data, verified on-chain" };
+    },
+  },
 };
 
 // ── Setup ──────────────────────────────────────────────────────────────────
 
 const rpcProvider = new ethers.JsonRpcProvider(config.rpcUrl);
-const wallet = new ethers.Wallet(config.marketplaceKey, rpcProvider);
+const wallet = new ethers.Wallet(config.treasuryKey, rpcProvider);
 
 const identity       = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, wallet);
 const validation     = new ethers.Contract(config.contracts.validation, VALIDATION_REGISTRY_ABI, wallet);
@@ -316,14 +341,17 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
 
   // ── Step 10: Reputation feedback ───────────────────────────────────
   console.log(`\n[Step 10] Submitting reputation feedback...`);
+  const { score: feedbackScore, comment: feedbackComment } = svcConfig.computeScore
+    ? svcConfig.computeScore(serviceResult)
+    : { score: 5, comment: `Excellent ${serviceType} service, verified on-chain` };
   const feedbackTx = await reputation.submitFeedback(
     chosenProvider.wallet,
     taskId,
-    5,
-    `Excellent ${serviceType} service, verified on-chain`
+    feedbackScore,
+    feedbackComment
   );
   await feedbackTx.wait();
-  console.log(`  ✓ Rated ${chosenProvider.name}: 5/5`);
+  console.log(`  ✓ Rated ${chosenProvider.name}: ${feedbackScore}/5 — "${feedbackComment}"`);
 
   // Ask provider to rate us back (best-effort, non-blocking)
   axios.post(`${chosenProvider.endpoint}/feedback`, {
@@ -368,9 +396,10 @@ if (require.main === module) {
 
   if (!serviceType || !inputJson) {
     console.log("Usage: ts-node agents/marketplace/client.ts <service-type> '<json-input>'");
-    console.log("  service-type: translation | summarization | code-review");
+    console.log("  service-type: oracle | translation | summarization | code-review");
     console.log("");
     console.log("Examples:");
+    console.log(`  ts-node agents/marketplace/client.ts oracle '{"pair":"ETH/USD"}'`);
     console.log(`  ts-node agents/marketplace/client.ts translation '{"text":"Hello world","targetLanguage":"es"}'`);
     console.log(`  ts-node agents/marketplace/client.ts summarization '{"text":"Long text to summarize."}'`);
     console.log(`  ts-node agents/marketplace/client.ts code-review '{"code":"var x = eval(y)","language":"javascript"}'`);
