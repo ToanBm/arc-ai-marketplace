@@ -92,6 +92,32 @@ app.get("/api/config", (_req, res) => {
 // ERC20 Transfer event signature for on-chain verification
 const ERC20_TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 
+// ── Auto-registration helper ────────────────────────────────────────────────
+// Ensures an agent is registered in IdentityRegistry using its own key.
+// Safe to call repeatedly — no-ops if already active.
+async function ensureRegistered(
+  key: string,
+  name: string,
+  endpoint: string,
+  capabilities: string[],
+): Promise<void> {
+  if (!key) return;
+  try {
+    const rpc = new ethers.JsonRpcProvider(config.rpcUrl);
+    const agentWallet = new ethers.Wallet(key, rpc);
+    const identityContract = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, agentWallet);
+    const existing = await identityContract.getAgent(agentWallet.address);
+    if (!existing.active) {
+      console.log(`[Gateway] ${name} not in registry — auto-registering...`);
+      const tx = await identityContract.registerAgent(name, endpoint, capabilities);
+      await tx.wait();
+      console.log(`[Gateway] ${name} registered (${agentWallet.address})`);
+    }
+  } catch (err: any) {
+    console.warn(`[Gateway] Auto-register ${name} failed:`, err.message);
+  }
+}
+
 // ── Live quote cache (30s TTL) — avoids repeated RPC calls per service type ──
 const quoteCache: Map<string, { amount: bigint; provider: string; price: string; ts: number }> = new Map();
 const QUOTE_TTL = 30_000;
@@ -365,6 +391,14 @@ app.post("/api/check", checkLimiter, async (req, res) => {
       error: "Agent B is unreachable. Start it with: npm run agent:b",
     });
   }
+
+  // Ensure Agent B is registered in IdentityRegistry before discovery
+  await ensureRegistered(
+    config.agentBKey,
+    "OracleBot-B",
+    config.agentBUrl,
+    ["oracle", "analysis", "chainlink"],
+  );
 
   // 5. Run workflow
   workflowRunning = true;
@@ -650,4 +684,18 @@ app.listen(PORT, () => {
   console.log(`  Marketplace services:  POST /api/services/{translation,summarization,code-review}`);
   console.log(`  Discovery:             GET  /api/services, /api/providers`);
   console.log(`  History:               GET  /api/history, /api/marketplace/stats`);
+
+  // Best-effort startup registration for all agents.
+  // Each agent also registers itself on startup; this is a safety net for
+  // cases where an agent's self-registration fails (e.g. after redeploy).
+  void (async () => {
+    await ensureRegistered(config.agentBKey, "OracleBot-B",          config.agentBUrl, ["oracle", "analysis", "chainlink"]);
+    await ensureRegistered(config.agentCKey, "OracleBot-C",          config.agentCUrl, ["oracle", "analysis", "chainlink"]);
+    await ensureRegistered(config.agentDKey, "TranslationBot-D",     config.agentDUrl, ["translation"]);
+    await ensureRegistered(config.agentEKey, "SummarizationBot-E",   config.agentEUrl, ["summarization"]);
+    await ensureRegistered(config.agentFKey, "CodeReviewBot-F",      config.agentFUrl, ["code-review"]);
+    await ensureRegistered(config.agentGKey, "TranslationBot-G",     config.agentGUrl, ["translation"]);
+    await ensureRegistered(config.agentHKey, "SummarizationBot-H",   config.agentHUrl, ["summarization"]);
+    await ensureRegistered(config.agentIKey, "CodeReviewBot-I",      config.agentIUrl, ["code-review"]);
+  })();
 });
