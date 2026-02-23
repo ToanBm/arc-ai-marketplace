@@ -134,6 +134,7 @@ const escrowContract = new ethers.Contract(config.contracts.escrow, PAYMENT_ESCR
 const usdc           = new ethers.Contract(config.contracts.usdc, USDC_ABI, wallet);
 
 let registered = false;
+let selectionCount = 0; // tracks total provider selections; every 6th uses cheapest price
 
 // ── Retry Helper ──────────────────────────────────────────────────────────
 
@@ -213,8 +214,9 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
   }
   console.log(`  Found ${providers.length} provider(s)`);
 
-  // ── Step 3: Rank by reputation ─────────────────────────────────────
-  console.log("\n[Step 3] Ranking providers by reputation...");
+  // ── Step 3: Select provider (reputation-based, or cheapest every 5th) ──
+  const useCheapest = selectionCount > 0 && selectionCount % 5 === 0;
+
   const ranked: RankedProvider[] = [];
   for (const p of providers) {
     const rep = await reputation.getReputation(p.wallet);
@@ -233,13 +235,37 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
     return Number(b.taskCount - a.taskCount);
   });
 
-  for (const r of ranked) {
-    const score = r.taskCount > 0n ? `${r.avgScore.toFixed(1)}/5` : "N/A";
-    console.log(`  ${r.name} — score: ${score}, tasks: ${r.taskCount}`);
+  let chosenProvider: RankedProvider;
+
+  if (useCheapest) {
+    console.log(`\n[Step 3] Price-based selection (selection #${selectionCount + 1} — cheapest round)...`);
+    const priced: Array<RankedProvider & { price: bigint }> = [];
+    for (const p of ranked) {
+      try {
+        const capRes = await axios.get(`${p.endpoint}/capabilities`, { timeout: 3000 });
+        const price = BigInt(capRes.data.pricing[svcConfig.pricingKey]);
+        priced.push({ ...p, price });
+        const score = p.taskCount > 0n ? `${p.avgScore.toFixed(1)}/5` : "N/A";
+        console.log(`  ${p.name} — price: ${ethers.formatUnits(price, 6)} USDC, rep: ${score}`);
+      } catch {
+        console.log(`  ${p.name} — unreachable, skipping`);
+      }
+    }
+    if (priced.length === 0) throw new Error("No reachable providers for price-based selection");
+    priced.sort((a, b) => (a.price < b.price ? -1 : a.price > b.price ? 1 : 0));
+    chosenProvider = priced[0];
+    console.log(`  ✓ Selected cheapest: ${chosenProvider.name} (${ethers.formatUnits(priced[0].price, 6)} USDC)`);
+  } else {
+    console.log(`\n[Step 3] Ranking providers by reputation (selection #${selectionCount + 1})...`);
+    for (const r of ranked) {
+      const score = r.taskCount > 0n ? `${r.avgScore.toFixed(1)}/5` : "N/A";
+      console.log(`  ${r.name} — score: ${score}, tasks: ${r.taskCount}`);
+    }
+    chosenProvider = ranked[0];
+    console.log(`  ✓ Selected: ${chosenProvider.name}`);
   }
 
-  const chosenProvider = ranked[0];
-  console.log(`  ✓ Selected: ${chosenProvider.name}`);
+  selectionCount++;
 
   // ── Step 4: Verify provider is online + get pricing ────────────────
   console.log("\n[Step 4] Verifying provider is online...");

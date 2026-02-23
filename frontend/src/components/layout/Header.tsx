@@ -18,7 +18,7 @@ export default function Header() {
     <header className="h-16 bg-surface border-b border-surface-light flex items-center justify-between px-6">
       <div className="flex items-center gap-3">
         <Cpu className="w-6 h-6 text-accent-light" />
-        <h1 className="text-lg font-bold text-white">Arc AI Marketplace</h1>
+        <h1 className="text-lg font-bold text-white tracking-tight">AgentNexus</h1>
       </div>
       <div className="flex items-center gap-4">
         {isConnected && formattedBalance !== null && (

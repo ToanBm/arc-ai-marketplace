@@ -1,4 +1,4 @@
-# Setup Guide: From PoC to Full AI Agent Marketplace
+# Setup Guide: From PoC to Full AgentNexus Marketplace
 
 ---
 

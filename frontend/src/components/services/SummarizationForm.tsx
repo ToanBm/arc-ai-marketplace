@@ -50,10 +50,10 @@ export default function SummarizationForm({ onLog, onStart }: FormProps) {
   }
 
   function startGatewaySteps(price: string, provider: string) {
-    scheduleLog(0,    "[Step 1] Registering Marketplace Client...", "step");
-    scheduleLog(200,  "  ✓ Already registered as MarketplaceClient", "success");
-    scheduleLog(600,  "", "info");
-    scheduleLog(700,  "[Step 2] Discovering summarization providers...", "step");
+    scheduleLog(0, "[Step 1] Registering Marketplace Client...", "step");
+    scheduleLog(200, "  ✓ Already registered as MarketplaceClient", "success");
+    scheduleLog(600, "", "info");
+    scheduleLog(700, "[Step 2] Discovering summarization providers...", "step");
     scheduleLog(1000, "  Found 2 provider(s)", "info");
     scheduleLog(1400, "", "info");
     scheduleLog(1500, "[Step 3] Ranking providers by reputation...", "step");
@@ -109,7 +109,8 @@ export default function SummarizationForm({ onLog, onStart }: FormProps) {
       await new Promise((r) => setTimeout(r, 1000));
 
       setStatus("Processing service...");
-      startGatewaySteps(quote.price, quote.provider);
+      const agentPrice = (parseFloat(quote.price) / 1.1).toFixed(2);
+      startGatewaySteps(agentPrice, quote.provider);
 
       const res = await submitSummarization({ ...data, paymentTxHash: txHash });
 
@@ -175,7 +176,7 @@ export default function SummarizationForm({ onLog, onStart }: FormProps) {
           <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
-      {result && <ServiceResult result={result} />}
+      {result && <ServiceResult result={result} onClose={() => setResult(null)} />}
     </div>
   );
 }

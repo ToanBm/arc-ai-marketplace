@@ -9,6 +9,8 @@ import CodeReviewForm from "@/components/services/CodeReviewForm";
 import OracleForm from "@/components/services/OracleForm";
 import GatewayLogPanel, { LogLine, LogType } from "@/components/services/GatewayLogPanel";
 
+import { ArrowLeft } from "lucide-react";
+
 const serviceTypes = ["translation", "summarization", "code-review", "oracle"];
 
 export type FormProps = {
@@ -22,8 +24,6 @@ const formMap: Record<string, React.ComponentType<FormProps>> = {
   "code-review": CodeReviewForm,
   oracle: OracleForm,
 };
-
-let logCounter = 0;
 
 function ServicesContent() {
   const searchParams = useSearchParams();
@@ -43,32 +43,51 @@ function ServicesContent() {
   const FormComponent = activeType ? formMap[activeType] : null;
 
   return (
-    <div className="flex gap-5 h-full">
-      {/* Left — service selector + form */}
-      <div className="flex-1 min-w-0 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Services</h1>
-          <p className="text-sm text-gray-500 mt-1">Submit AI agent service requests</p>
-        </div>
+    <div className="flex gap-6 h-full">
+      {/* Left — service selector + form (70% width) */}
+      <div className={`${activeType ? "flex-[7]" : "flex-1"} min-w-0 space-y-6`}>
+        {activeType ? (
+          // Single Service View
+          <div className="space-y-6">
+            <button
+              onClick={() => setActiveType("")}
+              className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-2"
+            >
+              <ArrowLeft size={20} />
+              <span>Back to Services</span>
+            </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {serviceTypes.map((type) => (
-            <ServiceCard
-              key={type}
-              type={type}
-              active={activeType === type}
-              onClick={() => setActiveType(activeType === type ? "" : type)}
-            />
-          ))}
-        </div>
+            <div className="w-full sm:w-72">
+              <ServiceCard
+                type={activeType}
+                active={true}
+                onClick={() => { }} // No-op since it's the only one
+              />
+            </div>
 
-        {FormComponent && <FormComponent onLog={addLog} onStart={clearLogs} />}
+            {FormComponent && <FormComponent onLog={addLog} onStart={clearLogs} />}
+          </div>
+        ) : (
+          // Services Grid View
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {serviceTypes.map((type) => (
+              <ServiceCard
+                key={type}
+                type={type}
+                active={false}
+                onClick={() => setActiveType(type)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Right — gateway log panel */}
-      <div className="w-80 flex-shrink-0">
-        <GatewayLogPanel logs={logs} />
-      </div>
+      {/* Right — gateway log panel (30% width, only show when a service is active) */}
+      {activeType && (
+        <div className="flex-[3] min-w-[320px] animate-in fade-in slide-in-from-right-4 duration-300">
+          <GatewayLogPanel logs={logs} />
+        </div>
+      )}
     </div>
   );
 }

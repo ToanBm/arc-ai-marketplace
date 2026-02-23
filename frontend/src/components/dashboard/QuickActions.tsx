@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Languages, FileText, Code } from "lucide-react";
+import { Languages, FileText, Code, TrendingUp } from "lucide-react";
 
 const actions = [
   {
@@ -24,6 +24,13 @@ const actions = [
     icon: Code,
     href: "/services?type=code-review",
     color: "text-purple-400",
+  },
+  {
+    label: "Price Oracle",
+    description: "Real-time on-chain price data",
+    icon: TrendingUp,
+    href: "/services?type=oracle",
+    color: "text-amber-400",
   },
 ];
 

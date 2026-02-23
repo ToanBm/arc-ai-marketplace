@@ -26,24 +26,24 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
   }
 
   function startGatewaySteps() {
-    scheduleLog(0,     "[Step 1] Registering Marketplace Client in Identity Registry...", "step");
-    scheduleLog(200,   "  ✓ Marketplace Client registered as TradingBot", "success");
-    scheduleLog(500,   "", "info");
-    scheduleLog(600,   "[Step 2] Discovering oracle providers...", "step");
-    scheduleLog(900,   "  Found 2 provider(s) — OracleBot-B, OracleBot-C", "info");
-    scheduleLog(1200,  "", "info");
-    scheduleLog(1300,  "[Step 3] Ranking providers by reputation...", "step");
-    scheduleLog(1600,  "  OracleBot-B — score: 5.0/5", "info");
-    scheduleLog(1900,  "  OracleBot-C — score: 5.0/5", "info");
-    scheduleLog(2200,  "  ✓ Selected: OracleBot-B", "success");
-    scheduleLog(2400,  "", "info");
-    scheduleLog(2500,  "[Step 4] Verifying provider is online...", "step");
-    scheduleLog(2800,  "  ✓ Online, price: 5.0 USDC/query", "success");
-    scheduleLog(3100,  "", "info");
-    scheduleLog(3200,  "[Step 5] Creating task on-chain...", "step");
-    scheduleLog(9500,  "  ✓ Task created in ValidationRegistry", "success");
-    scheduleLog(9800,  "", "info");
-    scheduleLog(9900,  "[Step 6] Depositing USDC into escrow (treasury-funded)...", "step");
+    scheduleLog(0, "[Step 1] Registering Marketplace Client in Identity Registry...", "step");
+    scheduleLog(200, "  ✓ Marketplace Client registered as TradingBot", "success");
+    scheduleLog(500, "", "info");
+    scheduleLog(600, "[Step 2] Discovering oracle providers...", "step");
+    scheduleLog(900, "  Found 2 provider(s) — OracleBot-B, OracleBot-C", "info");
+    scheduleLog(1200, "", "info");
+    scheduleLog(1300, "[Step 3] Ranking providers by reputation...", "step");
+    scheduleLog(1600, "  OracleBot-B — score: 5.0/5", "info");
+    scheduleLog(1900, "  OracleBot-C — score: 5.0/5", "info");
+    scheduleLog(2200, "  ✓ Selected: OracleBot-B", "success");
+    scheduleLog(2400, "", "info");
+    scheduleLog(2500, "[Step 4] Verifying provider is online...", "step");
+    scheduleLog(2800, "  ✓ Online, price: 5.0 USDC/query", "success");
+    scheduleLog(3100, "", "info");
+    scheduleLog(3200, "[Step 5] Creating task on-chain...", "step");
+    scheduleLog(9500, "  ✓ Task created in ValidationRegistry", "success");
+    scheduleLog(9800, "", "info");
+    scheduleLog(9900, "[Step 6] Depositing USDC into escrow (treasury-funded)...", "step");
     scheduleLog(24000, "  ✓ Escrow funded by Marketplace Client", "success");
     scheduleLog(24300, "", "info");
     scheduleLog(24400, "[Step 7] x402 flow — requesting oracle data...", "step");
@@ -103,11 +103,11 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
 
   const TrendIcon =
     trend === "bullish" ? TrendingUp :
-    trend === "bearish" ? TrendingDown : Minus;
+      trend === "bearish" ? TrendingDown : Minus;
 
   const trendColor =
     trend === "bullish" ? "text-green-400" :
-    trend === "bearish" ? "text-red-400" : "text-gray-400";
+      trend === "bearish" ? "text-red-400" : "text-gray-400";
 
   return (
     <div className="mt-4">
@@ -147,50 +147,73 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
       )}
 
       {result && oracleData && (
-        <div className="bg-surface rounded-xl p-5 border border-green-500/30 mt-4">
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle className="w-5 h-5 text-green-400" />
-            <h3 className="text-base font-semibold text-white">Oracle Result</h3>
-            {result.cached && (
-              <span className="ml-2 text-xs text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full">cached</span>
-            )}
-            <span className="ml-auto text-xs text-gray-500">
-              Task: {truncateId(oracle.taskId)}
-            </span>
-          </div>
-
-          {/* Price + Trend */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-surface-dark rounded-lg px-4 py-3 col-span-1">
-              <p className="text-xs text-gray-500 mb-1">Price</p>
-              <p className="text-2xl font-bold text-white">${oracleData.price}</p>
-              <p className="text-xs text-gray-500 mt-1">{oracleData.pair}</p>
-            </div>
-            <div className="bg-surface-dark rounded-lg px-4 py-3">
-              <p className="text-xs text-gray-500 mb-1">Trend</p>
-              <div className={`flex items-center gap-1 ${trendColor}`}>
-                <TrendIcon className="w-5 h-5" />
-                <span className="text-sm font-semibold capitalize">{trend ?? "—"}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl border border-white/10 shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <CheckCircle className="w-6 h-6 text-green-400" />
+                <h3 className="text-xl font-bold text-white">Oracle Result</h3>
+                {result.cached && (
+                  <span className="ml-2 text-xs text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full">cached</span>
+                )}
+                <span className="ml-auto text-xs text-gray-500 font-mono">
+                  Task: {truncateId(oracle.taskId)}
+                </span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {confidence != null ? `${(confidence * 100).toFixed(0)}% confidence` : ""}
-              </p>
-            </div>
-            <div className="bg-surface-dark rounded-lg px-4 py-3">
-              <p className="text-xs text-gray-500 mb-1">Provider</p>
-              <p className="text-sm text-white">{oracle.provider?.name}</p>
-              <p className="text-xs text-gray-500">{formatAddress(oracle.provider?.address)}</p>
-            </div>
-          </div>
 
-          {/* Meta */}
-          <div className="bg-surface-dark rounded-lg px-4 py-3 flex items-center gap-6 text-xs text-gray-500">
-            <span>Source: <span className="text-gray-300">{oracleData.source}</span></span>
-            <span>Rep: <span className="text-gray-300">{oracle.reputationScore?.toFixed(1)}/5</span></span>
-            <span>Cost: <span className="text-green-400">Free (treasury-funded)</span></span>
-            <span className="ml-auto">
-              {oracleData.timestamp ? new Date(oracleData.timestamp).toLocaleTimeString() : ""}
-            </span>
+              {/* Price + Trend */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-white/5 rounded-xl px-4 py-4 border border-white/5">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1">Price</p>
+                  <p className="text-3xl font-bold text-white">${oracleData.price}</p>
+                  <p className="text-xs text-gray-500 mt-1">{oracleData.pair}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl px-4 py-4 border border-white/5">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1">Trend</p>
+                  <div className={`flex items-center gap-2 ${trendColor}`}>
+                    <TrendIcon className="w-6 h-6" />
+                    <span className="text-lg font-bold capitalize">{trend ?? "—"}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {confidence != null ? `${(confidence * 100).toFixed(0)}% confidence` : ""}
+                  </p>
+                </div>
+                <div className="bg-white/5 rounded-xl px-4 py-4 border border-white/5">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1">Provider</p>
+                  <p className="text-sm font-medium text-white">{oracle.provider?.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">{formatAddress(oracle.provider?.address)}</p>
+                </div>
+              </div>
+
+              {/* Meta */}
+              <div className="bg-surface-dark rounded-xl px-5 py-4 flex items-center gap-6 text-[11px] text-gray-500 border border-white/5">
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-tighter text-white/20">Source</span>
+                  <span className="text-gray-300 font-medium">{oracleData.source}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-tighter text-white/20">Reputation</span>
+                  <span className="text-gray-300 font-medium">{oracle.reputationScore?.toFixed(1)}/5</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-tighter text-white/20">Cost</span>
+                  <span className="text-green-400 font-bold">Free</span>
+                </div>
+                <div className="ml-auto text-right">
+                  <span className="text-[9px] uppercase tracking-tighter text-white/20 block text-right">Timestamp</span>
+                  <span className="text-gray-300">{oracleData.timestamp ? new Date(oracleData.timestamp).toLocaleTimeString() : ""}</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                <button
+                  onClick={() => setResult(null)}
+                  className="bg-accent hover:bg-accent/80 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg shadow-accent/20"
+                >
+                  Use More
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

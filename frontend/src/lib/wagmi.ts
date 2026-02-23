@@ -22,7 +22,7 @@ const arcTestnet = defineChain({
 });
 
 export const wagmiConfig = getDefaultConfig({
-  appName: "Arc AI Marketplace",
+  appName: "AgentNexus",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "demo",
   chains: [hardhat, arcTestnet],
   ssr: true,

@@ -10,14 +10,7 @@ export default function ProvidersPage() {
   const { data: providers, error } = useProviders(capability || undefined);
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Providers</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Registered AI agents and their capabilities
-        </p>
-      </div>
-
+    <div className="space-y-6 w-full">
       <CapabilityFilter active={capability} onChange={setCapability} />
 
       {error ? (
@@ -29,7 +22,7 @@ export default function ProvidersPage() {
           No providers found{capability ? ` for "${capability}"` : ""}.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {providers.map((provider: any) => (
             <ProviderCard key={provider.address} provider={provider} />
           ))}
