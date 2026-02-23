@@ -274,6 +274,15 @@ export async function runServiceRequest(serviceType: string, serviceInput: any):
 
   // ── Step 6: Deposit USDC into escrow ───────────────────────────────
   console.log(`\n[Step 6] Depositing ${ethers.formatUnits(paymentAmount, 6)} USDC into escrow...`);
+
+  // Pre-flight: verify treasury has enough USDC before sending any tx
+  const treasuryBalance = await usdc.balanceOf(wallet.address);
+  if ((treasuryBalance as bigint) < paymentAmount) {
+    throw new Error(
+      `Treasury has insufficient USDC: has ${ethers.formatUnits(treasuryBalance as bigint, 6)} USDC, needs ${ethers.formatUnits(paymentAmount, 6)} USDC`
+    );
+  }
+
   const approveTx = await usdc.approve(config.contracts.escrow, paymentAmount);
   await approveTx.wait();
   const depositTx = await escrowContract.deposit(taskId, chosenProvider.wallet, paymentAmount);

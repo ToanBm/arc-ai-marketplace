@@ -21,7 +21,7 @@ const descriptions: Record<string, string> = {
   translation: "Translate text between languages using AI agents on the Arc network. Powered by x402 payment protocol.",
   summarization: "Get concise summaries of long text, articles, or documents. AI agents compete to deliver the best result.",
   "code-review": "Submit code for automated review with suggestions for improvements, bugs, and best practices.",
-  oracle: "Get live ETH/USD or BTC/USD price data from Agents B & C via Chainlink. Runs Agent A's full 10-step on-chain workflow.",
+  oracle: "Get live ETH/USD or BTC/USD price data from Agents B & C via Chainlink. Runs the full 10-step on-chain workflow — free for users, funded by the treasury.",
 };
 
 interface ServiceCardProps {
@@ -56,7 +56,7 @@ export default function ServiceCard({ type, active, onClick }: ServiceCardProps)
       </div>
       <p className="text-sm text-gray-400">{descriptions[type] || type}</p>
       <p className="text-xs text-gray-600 mt-2">
-        {isOracle ? "via Agent A → B / C" : quote ? `via ${quote.provider}` : "Loading provider…"}
+        {isOracle ? "via Marketplace Client → B / C" : quote ? `via ${quote.provider}` : "Loading provider…"}
       </p>
       <p className="text-xs text-accent-light mt-1">
         {active ? "Form open below" : "Click to submit a request"}

@@ -258,7 +258,7 @@ app.post("/service/request", serviceLimiter, async (req: Request, res: Response)
   let proof: X402PaymentProof;
   try {
     proof = parsePaymentProof(proofHeader);
-  } catch {
+  } catch (err: any) {
     res.status(400).json({ error: "Invalid X-402-Payment-Proof header" });
     return;
   }
@@ -274,8 +274,8 @@ app.post("/service/request", serviceLimiter, async (req: Request, res: Response)
       res.status(401).json({ error: "Payment proof signature verification failed" });
       return;
     }
-  } catch {
-    res.status(401).json({ error: "Invalid payment proof signature" });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || "Invalid payment proof signature" });
     return;
   }
 
@@ -347,7 +347,7 @@ app.post("/feedback", async (req: Request, res: Response) => {
     } else {
       score = 3; comment = "Payment status unclear";
     }
-  } catch {
+  } catch (err: any) {
     score = 4; comment = "Could not verify escrow status";
   }
 

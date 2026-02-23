@@ -176,8 +176,8 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
       return;
     }
     console.log(`[Agent C] Signature verified for payer ${proof.payer.slice(0, 10)}...`);
-  } catch (err) {
-    res.status(401).json({ error: "Invalid payment proof signature" });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || "Invalid payment proof signature" });
     return;
   }
 
@@ -197,7 +197,7 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
     console.log(`[Agent C] Payment verified on-chain: ${ethers.formatUnits(escrowData.amount, 6)} USDC`);
     savePaymentProof(taskId, proof.txHash, proof.payer, escrowData.amount.toString());
     markPaymentVerified(taskId);
-  } catch (err) {
+  } catch (err: any) {
     console.error(`[Agent C] On-chain verification error:`, err);
     res.status(500).json({ error: "Failed to verify payment on-chain" });
     return;

@@ -154,7 +154,12 @@ async function getProviderQuote(serviceType: string): Promise<{ amount: bigint; 
 
     const top = ranked[0];
     const capRes = await axios.get(`${top.endpoint}/capabilities`, { timeout: 3000 });
-    const agentAmount = BigInt(capRes.data.pricing[svcConfig.pricingKey]);
+    const rawPrice = capRes.data.pricing?.[svcConfig.pricingKey];
+    if (!rawPrice || isNaN(Number(rawPrice)) || Number(rawPrice) <= 0) {
+      console.warn(`[Gateway] Invalid pricing from ${top.name}: ${rawPrice}`);
+      return null;
+    }
+    const agentAmount = BigInt(rawPrice);
     const amount = agentAmount * MARKUP_BPS / 100n; // marked-up amount user must pay
     const price = ethers.formatUnits(amount, 6);
 
@@ -428,36 +433,51 @@ app.get("/api/services", (_req, res) => {
   res.json({ services });
 });
 
+// ── Providers cache (30s TTL) — avoids 3×N RPC calls on every request ───────
+const providersCache: { agents: any[]; ts: number } = { agents: [], ts: 0 };
+const PROVIDERS_CACHE_TTL = 30_000;
+
+async function fetchAllProviders(): Promise<any[]> {
+  if (Date.now() - providersCache.ts < PROVIDERS_CACHE_TTL) return providersCache.agents;
+
+  const rpc = new ethers.JsonRpcProvider(config.rpcUrl);
+  const identity = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, rpc);
+  const reputationContract = new ethers.Contract(config.contracts.reputation, REPUTATION_REGISTRY_ABI, rpc);
+
+  const count = Math.min(Number(await identity.agentCount()), 200); // cap at 200
+  const agents: any[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const addr = await identity.agentList(i);
+    const info = await identity.getAgent(addr);
+    if (!info.active) continue;
+
+    const [avgScore, rep] = await Promise.all([
+      reputationContract.getAverageScore(addr),
+      reputationContract.getReputation(addr),
+    ]);
+
+    agents.push({
+      address: addr,
+      name: info.name,
+      endpoint: info.endpoint,
+      capabilities: Array.from(info.capabilities),
+      reputation: {
+        averageScore: Number(avgScore) / 100,
+        taskCount: Number(rep.taskCount),
+      },
+    });
+  }
+
+  providersCache.agents = agents;
+  providersCache.ts = Date.now();
+  return agents;
+}
+
 // ── GET /api/providers — All registered agents with reputation ──────────────
 app.get("/api/providers", async (_req, res) => {
   try {
-    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
-    const identity = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, provider);
-    const reputationContract = new ethers.Contract(config.contracts.reputation, REPUTATION_REGISTRY_ABI, provider);
-
-    const count = Number(await identity.agentCount());
-    const agents: any[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const addr = await identity.agentList(i);
-      const info = await identity.getAgent(addr);
-      if (!info.active) continue;
-
-      const avgScore = Number(await reputationContract.getAverageScore(addr)) / 100;
-      const rep = await reputationContract.getReputation(addr);
-
-      agents.push({
-        address: addr,
-        name: info.name,
-        endpoint: info.endpoint,
-        capabilities: Array.from(info.capabilities),
-        reputation: {
-          averageScore: avgScore,
-          taskCount: Number(rep.taskCount),
-        },
-      });
-    }
-
+    const agents = await fetchAllProviders();
     res.json({ providers: agents });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -468,30 +488,9 @@ app.get("/api/providers", async (_req, res) => {
 app.get("/api/providers/:capability", async (req, res) => {
   try {
     const capability = req.params.capability;
-    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
-    const identity = new ethers.Contract(config.contracts.identity, IDENTITY_REGISTRY_ABI, provider);
-    const reputationContract = new ethers.Contract(config.contracts.reputation, REPUTATION_REGISTRY_ABI, provider);
-
-    const providers = await identity.findByCapability(capability);
-    const agents: any[] = [];
-
-    for (const p of providers) {
-      const avgScore = Number(await reputationContract.getAverageScore(p.wallet)) / 100;
-      const rep = await reputationContract.getReputation(p.wallet);
-
-      agents.push({
-        address: p.wallet,
-        name: p.name,
-        endpoint: p.endpoint,
-        capabilities: Array.from(p.capabilities),
-        reputation: {
-          averageScore: avgScore,
-          taskCount: Number(rep.taskCount),
-        },
-      });
-    }
-
-    res.json({ capability, providers: agents });
+    const all = await fetchAllProviders();
+    const filtered = all.filter((a) => a.capabilities.includes(capability));
+    res.json({ capability, providers: filtered });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -527,7 +526,6 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["translation"] = true;
-  const translationReset = setTimeout(() => { serviceRunning["translation"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("translation", { text, targetLanguage });
     try { saveServiceResult(result.taskId, result.serviceType, `${text.slice(0, 80)}…`, JSON.stringify(result.serviceResult)); } catch {}
@@ -542,7 +540,6 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
-    clearTimeout(translationReset);
     serviceRunning["translation"] = false;
   }
 });
@@ -574,7 +571,6 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["summarization"] = true;
-  const summarizationReset = setTimeout(() => { serviceRunning["summarization"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("summarization", { text });
     try { saveServiceResult(result.taskId, result.serviceType, `${text.slice(0, 80)}…`, JSON.stringify(result.serviceResult)); } catch {}
@@ -589,7 +585,6 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
-    clearTimeout(summarizationReset);
     serviceRunning["summarization"] = false;
   }
 });
@@ -621,7 +616,6 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
   }
 
   serviceRunning["code-review"] = true;
-  const codeReviewReset = setTimeout(() => { serviceRunning["code-review"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("code-review", { code, language });
     try { saveServiceResult(result.taskId, result.serviceType, `${(language || "code").toUpperCase()}: ${code.slice(0, 60)}…`, JSON.stringify(result.serviceResult)); } catch {}
@@ -636,7 +630,6 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   } finally {
-    clearTimeout(codeReviewReset);
     serviceRunning["code-review"] = false;
   }
 });

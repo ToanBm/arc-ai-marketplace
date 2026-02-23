@@ -85,9 +85,12 @@ async function fetchFromPublicApi(pair: string): Promise<OracleData> {
       timestamp: ts,
       source: "coingecko-api",
     };
-  } catch (err) {
-    // Fallback: generate simulated data for offline/rate-limited scenarios
-    console.log(`[Chainlink] API unavailable, using simulated data for ${pair}`);
+  } catch (err: any) {
+    // CoinGecko rate limit (429) or network issue — fall back to simulated data.
+    // WARNING: simulated prices are NOT real market data. Replace with a paid
+    // API key (e.g. CoinGecko Pro, CoinMarketCap) for production use.
+    const isRateLimit = err?.response?.status === 429;
+    console.warn(`[Chainlink] ${isRateLimit ? "Rate limited by CoinGecko" : `API error: ${err.message}`} — falling back to SIMULATED prices (not real market data)`);
     return generateSimulatedData(pair);
   }
 }

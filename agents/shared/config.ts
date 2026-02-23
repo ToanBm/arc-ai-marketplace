@@ -1,10 +1,20 @@
 import * as dotenv from "dotenv";
+import { ethers } from "ethers";
 dotenv.config();
 
 /**
  * Shared configuration for both agents.
  * Reads contract addresses from environment or uses defaults for local testing.
  */
+
+// Derive treasury address deterministically from private key.
+// Eliminates the dual-source-of-truth problem where TREASURY_ADDRESS and
+// PRIVATE_KEY_TREASURY could drift out of sync.
+const _treasuryKey = process.env.PRIVATE_KEY_TREASURY || "";
+const _treasuryAddress = _treasuryKey
+  ? new ethers.Wallet(_treasuryKey).address
+  : (process.env.TREASURY_ADDRESS || "");
+
 export const config = {
   // Network
   rpcUrl: process.env.ARC_RPC_URL || "http://127.0.0.1:8545",
@@ -20,12 +30,12 @@ export const config = {
   agentIKey: process.env.PRIVATE_KEY_AGENT_I || "",
 
   // Marketplace client key
-  treasuryKey: process.env.PRIVATE_KEY_TREASURY || "",
+  treasuryKey: _treasuryKey,
 
   // Treasury = marketplace wallet (Option 1 unified model).
-  // User pays marked-up price here; this wallet also pays agents at base price.
+  // Address is derived from PRIVATE_KEY_TREASURY — always in sync.
   // Net retained per request = 10% of agent price.
-  treasuryAddress: process.env.TREASURY_ADDRESS || "",
+  treasuryAddress: _treasuryAddress,
 
   // Contract addresses (set after deployment)
   contracts: {

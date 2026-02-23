@@ -32,8 +32,12 @@ export interface X402PaymentProof {
   taskId: string;
   txHash: string;
   payer: string;
-  signature: string;      // EIP-191 signature of keccak256(taskId, txHash)
+  timestamp: number;      // Unix ms when proof was created — used for expiry check
+  signature: string;      // EIP-191 signature of keccak256(taskId, txHash, timestamp)
 }
+
+// Proofs are valid for 5 minutes; prevents replay of old signed proofs.
+const PROOF_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Build the 402 response payload that a provider agent sends to the Marketplace Client.
@@ -66,9 +70,10 @@ export async function buildPaymentProof(params: {
   payer: string;
   wallet: ethers.Wallet;
 }): Promise<X402PaymentProof> {
+  const timestamp = Date.now();
   const messageHash = ethers.solidityPackedKeccak256(
-    ["bytes32", "bytes32"],
-    [params.taskId, params.txHash]
+    ["bytes32", "bytes32", "uint256"],
+    [params.taskId, params.txHash, timestamp]
   );
   const signature = await params.wallet.signMessage(ethers.getBytes(messageHash));
 
@@ -76,18 +81,28 @@ export async function buildPaymentProof(params: {
     taskId: params.taskId,
     txHash: params.txHash,
     payer: params.payer,
+    timestamp,
     signature,
   };
 }
 
 /**
- * Verify a payment proof signature. Returns the recovered signer address.
- * Server compares this against the declared payer and the escrow's on-chain payer.
+ * Verify a payment proof signature and expiry.
+ * Returns the recovered signer address.
+ * Throws if the proof is older than 5 minutes (replay protection).
  */
 export function verifyPaymentProof(proof: X402PaymentProof): string {
+  // Expiry check
+  if (!proof.timestamp || typeof proof.timestamp !== "number") {
+    throw new Error("Payment proof missing timestamp");
+  }
+  if (Date.now() - proof.timestamp > PROOF_TTL_MS) {
+    throw new Error("Payment proof expired (max 5 minutes)");
+  }
+
   const messageHash = ethers.solidityPackedKeccak256(
-    ["bytes32", "bytes32"],
-    [proof.taskId, proof.txHash]
+    ["bytes32", "bytes32", "uint256"],
+    [proof.taskId, proof.txHash, proof.timestamp]
   );
   return ethers.verifyMessage(ethers.getBytes(messageHash), proof.signature);
 }
@@ -110,7 +125,7 @@ export function parsePaymentRequest(header: string): X402PaymentRequest {
  */
 export function parsePaymentProof(header: string): X402PaymentProof {
   const parsed = JSON.parse(header);
-  if (!parsed.taskId || !parsed.txHash || !parsed.payer || !parsed.signature) {
+  if (!parsed.taskId || !parsed.txHash || !parsed.payer || !parsed.signature || !parsed.timestamp) {
     throw new Error("Invalid X402 payment proof: missing required fields");
   }
   return parsed;

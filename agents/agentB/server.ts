@@ -149,8 +149,8 @@ app.post("/oracle/request", oracleLimiter, async (req: Request, res: Response) =
       return;
     }
     console.log(`[Agent B] Signature verified for payer ${proof.payer.slice(0, 10)}...`);
-  } catch (err) {
-    res.status(401).json({ error: "Invalid payment proof signature" });
+  } catch (err: any) {
+    res.status(401).json({ error: err?.message || "Invalid payment proof signature" });
     return;
   }
 
