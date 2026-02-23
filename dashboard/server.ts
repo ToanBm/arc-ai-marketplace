@@ -8,7 +8,7 @@ import { config } from "../agents/shared/config";
 import { IDENTITY_REGISTRY_ABI, REPUTATION_REGISTRY_ABI, USDC_ABI } from "../agents/shared/abis";
 import { SUPPORTED_PAIRS, normalizePair, isSupportedPair } from "../agents/shared/chainlink";
 import { runServiceRequest, SERVICE_REGISTRY, MarketplaceResult } from "../agents/marketplace/client";
-import { getRecentTasks, getServiceResult, getStats } from "../agents/shared/storage";
+import { getRecentTasks, getRecentServiceResults, getServiceResult, getOracleResult, saveServiceResult, getStats } from "../agents/shared/storage";
 
 const PORT = config.gatewayPort;
 const LOG_FILE = path.join(__dirname, "..", "agents", "data", "workflow-log.json");
@@ -530,6 +530,7 @@ app.post("/api/services/translation", serviceLimiter, async (req, res) => {
   const translationReset = setTimeout(() => { serviceRunning["translation"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("translation", { text, targetLanguage });
+    try { saveServiceResult(result.taskId, result.serviceType, `${text.slice(0, 80)}…`, JSON.stringify(result.serviceResult)); } catch {}
     res.json({
       taskId: result.taskId,
       serviceType: result.serviceType,
@@ -576,6 +577,7 @@ app.post("/api/services/summarization", serviceLimiter, async (req, res) => {
   const summarizationReset = setTimeout(() => { serviceRunning["summarization"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("summarization", { text });
+    try { saveServiceResult(result.taskId, result.serviceType, `${text.slice(0, 80)}…`, JSON.stringify(result.serviceResult)); } catch {}
     res.json({
       taskId: result.taskId,
       serviceType: result.serviceType,
@@ -622,6 +624,7 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
   const codeReviewReset = setTimeout(() => { serviceRunning["code-review"] = false; }, 90_000);
   try {
     const result = await runServiceRequest("code-review", { code, language });
+    try { saveServiceResult(result.taskId, result.serviceType, `${(language || "code").toUpperCase()}: ${code.slice(0, 60)}…`, JSON.stringify(result.serviceResult)); } catch {}
     res.json({
       taskId: result.taskId,
       serviceType: result.serviceType,
@@ -641,8 +644,30 @@ app.post("/api/services/code-review", serviceLimiter, async (req, res) => {
 // ── GET /api/history — Recent tasks from SQLite ─────────────────────────────
 app.get("/api/history", (_req, res) => {
   try {
-    const tasks = getRecentTasks();
-    res.json({ tasks });
+    // Oracle tasks (from task_records, saved by Agent B)
+    const oracleTasks = getRecentTasks(50).map((t: any) => ({
+      taskId: t.task_id,
+      serviceType: "oracle",
+      inputSummary: t.pair || "oracle query",
+      status: t.status || "completed",
+      createdAt: t.created_at,
+    }));
+
+    // Service tasks (translation / summarization / code-review)
+    const serviceTasks = getRecentServiceResults(50).map((t: any) => ({
+      taskId: t.task_id,
+      serviceType: t.service_type,
+      inputSummary: t.input_summary,
+      status: "completed",
+      createdAt: t.created_at,
+    }));
+
+    // Merge and sort by createdAt descending, cap at 100
+    const all = [...oracleTasks, ...serviceTasks]
+      .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+      .slice(0, 100);
+
+    res.json({ tasks: all });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -651,17 +676,31 @@ app.get("/api/history", (_req, res) => {
 // ── GET /api/history/:taskId — Specific task result ─────────────────────────
 app.get("/api/history/:taskId", (req, res) => {
   try {
-    const result = getServiceResult(req.params.taskId);
-    if (!result) {
-      return res.status(404).json({ error: "Task not found" });
+    // Check service_results first (translation / summarization / code-review)
+    const svc = getServiceResult(req.params.taskId);
+    if (svc) {
+      return res.json({
+        taskId: svc.taskId,
+        serviceType: svc.serviceType,
+        inputSummary: svc.inputSummary,
+        result: JSON.parse(svc.resultJson),
+        resultHash: svc.resultHash,
+      });
     }
-    res.json({
-      taskId: result.taskId,
-      serviceType: result.serviceType,
-      inputSummary: result.inputSummary,
-      result: JSON.parse(result.resultJson),
-      resultHash: result.resultHash,
-    });
+
+    // Fall back to oracle_results
+    const oracle = getOracleResult(req.params.taskId);
+    if (oracle) {
+      return res.json({
+        taskId: oracle.taskId,
+        serviceType: "oracle",
+        inputSummary: oracle.pair,
+        result: JSON.parse(oracle.resultJson),
+        resultHash: oracle.resultHash,
+      });
+    }
+
+    return res.status(404).json({ error: "Task not found" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

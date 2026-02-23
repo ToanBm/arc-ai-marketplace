@@ -114,6 +114,10 @@ export function getRecentTasks(limit: number = 50): any[] {
   return getDb().prepare("SELECT * FROM task_records ORDER BY created_at DESC LIMIT ?").all(limit);
 }
 
+export function getRecentServiceResults(limit: number = 50): any[] {
+  return getDb().prepare("SELECT * FROM service_results ORDER BY created_at DESC LIMIT ?").all(limit);
+}
+
 // ── Payment Proofs ───────────────────────────────────────────────────────────
 
 export function savePaymentProof(taskId: string, txHash: string, payer: string, amount?: string): void {

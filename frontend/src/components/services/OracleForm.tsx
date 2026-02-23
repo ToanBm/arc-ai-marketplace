@@ -43,11 +43,11 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
     scheduleLog(3200,  "[Step 5] Creating task on-chain...", "step");
     scheduleLog(9500,  "  ✓ Task created in ValidationRegistry", "success");
     scheduleLog(9800,  "", "info");
-    scheduleLog(9900,  "[Step 6] Depositing USDC into escrow...", "step");
-    scheduleLog(24000, "  ✓ 5.0 USDC deposited into PaymentEscrow", "success");
+    scheduleLog(9900,  "[Step 6] Depositing USDC into escrow (treasury-funded)...", "step");
+    scheduleLog(24000, "  ✓ Escrow funded by Marketplace Client", "success");
     scheduleLog(24300, "", "info");
     scheduleLog(24400, "[Step 7] x402 flow — requesting oracle data...", "step");
-    scheduleLog(24700, "  ← 402 Payment Required (5.0 USDC)", "info");
+    scheduleLog(24700, "  ← 402 Payment Required (paid by treasury)", "info");
     scheduleLog(25000, "  → Sending request with payment proof...", "info");
   }
 
@@ -77,7 +77,7 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
         setTimeout(() => onLog("  ✓ Hash verified in ValidationRegistry", "success"), 1500);
         setTimeout(() => onLog("", "info"), 1800);
         setTimeout(() => onLog("[Step 9] Releasing payment from escrow...", "step"), 1900);
-        setTimeout(() => onLog("  ✓ 5.0 USDC released to provider", "success"), 3500);
+        setTimeout(() => onLog("  ✓ Payment released to provider (treasury-funded)", "success"), 3500);
         setTimeout(() => onLog("", "info"), 3800);
         setTimeout(() => onLog("[Step 10] Submitting reputation feedback...", "step"), 3900);
         setTimeout(() => onLog("  ✓ Feedback submitted", "success"), 5500);
@@ -187,7 +187,7 @@ export default function OracleForm({ onLog, onStart }: FormProps) {
           <div className="bg-surface-dark rounded-lg px-4 py-3 flex items-center gap-6 text-xs text-gray-500">
             <span>Source: <span className="text-gray-300">{oracleData.source}</span></span>
             <span>Rep: <span className="text-gray-300">{oracle.reputationScore?.toFixed(1)}/5</span></span>
-            <span>Payment: <span className="text-gray-300">{oracle?.paymentAmount ?? "—"} USDC</span></span>
+            <span>Cost: <span className="text-green-400">Free (treasury-funded)</span></span>
             <span className="ml-auto">
               {oracleData.timestamp ? new Date(oracleData.timestamp).toLocaleTimeString() : ""}
             </span>
